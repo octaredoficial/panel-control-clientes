@@ -3,12 +3,504 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>Panel de Control de Clientes</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- La estructura completa de paneles y modales se construye en FEAT-002. -->
-  <div id="app"></div>
+  <!--
+    ============================================================
+    Panel de Control de Clientes - Estructura de la UI (FEAT-002)
+    ------------------------------------------------------------
+    Esta feature construye SOLO la estructura (HTML) y los estilos
+    (styles.css). El render dinamico y los listeners los cablea
+    FEAT-003 usando los ids / data-attributes definidos aqui.
+
+    IDs estables disponibles para FEAT-003:
+      Header:   #btn-config, #btn-nuevo-ahorro, #btn-nuevo-gasto,
+                #btn-nuevo-cliente, #btn-tema
+      Resumen:  #resumen-titulo, #btn-mes-prev, #btn-mes-next,
+                #metrica-ingresos, #metrica-egresos,
+                #metrica-ganancia, #metrica-porcobrar
+      Stats:    #stat-activos, #stat-pausados, (details) #stats-mes
+      Pagos:    #pagos-resumen-num, #pagos-resumen-monto,
+                #pagos-badge-aviso, #lista-pagos
+      Clientes: #buscador, chips .chip[data-filtro], spans de conteo
+                #cuenta-todos ... #cuenta-directo, #orden-clientes,
+                #btn-exportar-csv, #lista-clientes
+      Detalle:  pestanas .pestana[data-tab], #detalle-titulo,
+                #detalle-total, #lista-movimientos, #detalle-vacio
+      Modales:  #modal-cliente, #modal-gasto, #modal-ingreso,
+                #modal-ahorro, #modal-config (ocultos: [hidden])
+    ============================================================
+  -->
+
+  <div id="app" class="app">
+
+    <!-- ================= HEADER ================= -->
+    <header class="header">
+      <div class="header__titulos">
+        <h1 class="header__titulo">Panel de Control de Clientes</h1>
+        <p class="header__subtitulo">Gestiona tus clientes y finanzas de forma sencilla.</p>
+      </div>
+      <div class="header__acciones">
+        <button type="button" id="btn-config" class="btn btn--secundario">
+          <span class="btn__icono" aria-hidden="true">⚙️</span>
+          <span>Configuración</span>
+        </button>
+        <button type="button" id="btn-nuevo-ahorro" class="btn btn--secundario">
+          <span class="btn__icono" aria-hidden="true">🐷</span>
+          <span>Nuevo Ahorro</span>
+        </button>
+        <button type="button" id="btn-nuevo-gasto" class="btn btn--secundario">
+          <span class="btn__icono" aria-hidden="true">➖</span>
+          <span>Nuevo Gasto</span>
+        </button>
+        <button type="button" id="btn-nuevo-cliente" class="btn btn--primario">
+          <span class="btn__icono" aria-hidden="true">➕</span>
+          <span>Nuevo Cliente</span>
+        </button>
+        <button type="button" id="btn-tema" class="btn btn--icono" title="Cambiar modo claro / oscuro" aria-label="Cambiar modo claro / oscuro">
+          <span id="btn-tema-icono" aria-hidden="true">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="contenido">
+
+      <!-- ================= RESUMEN DEL MES ================= -->
+      <section class="panel panel--resumen" aria-labelledby="resumen-titulo">
+        <div class="panel__cabecera">
+          <div class="resumen__nav">
+            <button type="button" id="btn-mes-prev" class="btn btn--icono btn--nav" title="Mes anterior" aria-label="Mes anterior">‹</button>
+            <h2 class="panel__titulo" id="resumen-titulo">Resumen de <span id="resumen-mes">Mes de Año</span></h2>
+            <button type="button" id="btn-mes-next" class="btn btn--icono btn--nav" title="Mes siguiente" aria-label="Mes siguiente">›</button>
+          </div>
+        </div>
+
+        <div class="metricas">
+          <article class="metrica metrica--ingreso">
+            <span class="metrica__etiqueta">Ingresos</span>
+            <span class="metrica__valor" id="metrica-ingresos">$0.00</span>
+          </article>
+          <article class="metrica metrica--egreso">
+            <span class="metrica__etiqueta">Egresos</span>
+            <span class="metrica__valor" id="metrica-egresos">$0.00</span>
+          </article>
+          <article class="metrica metrica--ganancia">
+            <span class="metrica__etiqueta">Ganancia Neta</span>
+            <span class="metrica__valor" id="metrica-ganancia">$0.00</span>
+          </article>
+          <article class="metrica metrica--porcobrar">
+            <span class="metrica__etiqueta">Por cobrar (hasta fin de mes)</span>
+            <span class="metrica__valor" id="metrica-porcobrar">$0.00</span>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= ESTADISTICAS ================= -->
+      <section class="panel panel--stats" aria-labelledby="stats-titulo">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo" id="stats-titulo">Estadísticas</h2>
+        </div>
+
+        <div class="stats__grid">
+          <article class="stat stat--activos">
+            <span class="stat__etiqueta">Clientes Activos</span>
+            <span class="stat__valor" id="stat-activos">0</span>
+          </article>
+          <article class="stat stat--pausados">
+            <span class="stat__etiqueta">Clientes Pausados</span>
+            <span class="stat__valor" id="stat-pausados">0</span>
+          </article>
+        </div>
+
+        <details class="desplegable" id="stats-mes">
+          <summary class="desplegable__titulo">Estadísticas del Mes</summary>
+          <div class="desplegable__cuerpo">
+            <ul class="stats-mes__lista">
+              <li class="stats-mes__item">
+                <span class="stats-mes__etiqueta">Clientes al corriente</span>
+                <span class="stats-mes__valor" id="stat-mes-corriente">0</span>
+              </li>
+              <li class="stats-mes__item">
+                <span class="stats-mes__etiqueta">Clientes vencidos</span>
+                <span class="stats-mes__valor" id="stat-mes-vencidos">0</span>
+              </li>
+              <li class="stats-mes__item">
+                <span class="stats-mes__etiqueta">Pagos cobrados este mes</span>
+                <span class="stats-mes__valor" id="stat-mes-cobrados">0</span>
+              </li>
+              <li class="stats-mes__item">
+                <span class="stats-mes__etiqueta">Clientes PTP</span>
+                <span class="stats-mes__valor" id="stat-mes-ptp">0</span>
+              </li>
+              <li class="stats-mes__item">
+                <span class="stats-mes__etiqueta">Clientes Directo</span>
+                <span class="stats-mes__valor" id="stat-mes-directo">0</span>
+              </li>
+              <li class="stats-mes__item">
+                <span class="stats-mes__etiqueta">Ahorro acumulado</span>
+                <span class="stats-mes__valor" id="stat-mes-ahorro">$0.00</span>
+              </li>
+            </ul>
+          </div>
+        </details>
+      </section>
+
+      <!-- ================= PAGOS PROXIMOS O VENCIDOS ================= -->
+      <section class="panel panel--pagos" aria-labelledby="pagos-titulo">
+        <div class="panel__cabecera panel__cabecera--pagos">
+          <div>
+            <h2 class="panel__titulo" id="pagos-titulo">Pagos Próximos o Vencidos</h2>
+            <p class="pagos__resumen">
+              <span id="pagos-resumen-num">0</span> vencidos
+              <span class="pagos__sep" aria-hidden="true">·</span>
+              <span id="pagos-resumen-monto">$0.00</span>
+            </p>
+          </div>
+          <span class="badge badge--aviso" id="pagos-badge-aviso">Aviso: 3 días antes</span>
+        </div>
+
+        <!-- FEAT-003 inyecta aqui tarjetas de pago (plantilla: .tarjeta.tarjeta--cliente) -->
+        <div class="lista-tarjetas" id="lista-pagos">
+          <p class="estado-vacio" id="pagos-vacio">No hay pagos próximos ni vencidos.</p>
+        </div>
+      </section>
+
+      <!-- ================= CLIENTES ACTIVOS Y PAUSADOS ================= -->
+      <section class="panel panel--clientes" aria-labelledby="clientes-titulo">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo" id="clientes-titulo">Clientes Activos y Pausados</h2>
+        </div>
+
+        <div class="clientes__controles">
+          <input
+            type="search"
+            id="buscador"
+            class="campo campo--busqueda"
+            placeholder="Buscar por nombre, teléfono, dirección o IP…"
+            aria-label="Buscar clientes" />
+
+          <div class="chips" role="group" aria-label="Filtros de clientes">
+            <button type="button" class="chip chip--activo" data-filtro="todos">
+              Todos <span class="chip__cuenta" id="cuenta-todos">0</span>
+            </button>
+            <button type="button" class="chip" data-filtro="activos">
+              Activos <span class="chip__cuenta" id="cuenta-activos">0</span>
+            </button>
+            <button type="button" class="chip" data-filtro="pausados">
+              Pausados <span class="chip__cuenta" id="cuenta-pausados">0</span>
+            </button>
+            <button type="button" class="chip" data-filtro="vencidos">
+              Vencidos <span class="chip__cuenta" id="cuenta-vencidos">0</span>
+            </button>
+            <button type="button" class="chip" data-filtro="ptp">
+              PTP <span class="chip__cuenta" id="cuenta-ptp">0</span>
+            </button>
+            <button type="button" class="chip" data-filtro="directo">
+              Directo <span class="chip__cuenta" id="cuenta-directo">0</span>
+            </button>
+          </div>
+
+          <div class="clientes__acciones">
+            <label class="campo-label" for="orden-clientes">Ordenar:</label>
+            <select id="orden-clientes" class="campo campo--select">
+              <option value="proximo">Por próximo pago</option>
+              <option value="nombre">Por nombre</option>
+              <option value="monto">Por monto</option>
+            </select>
+            <button type="button" id="btn-exportar-csv" class="btn btn--secundario">
+              <span class="btn__icono" aria-hidden="true">📄</span>
+              <span>Exportar a CSV</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- FEAT-003 inyecta aqui tarjetas de cliente (plantilla: .tarjeta.tarjeta--cliente) -->
+        <div class="lista-tarjetas" id="lista-clientes">
+          <p class="estado-vacio" id="clientes-vacio">No hay clientes que coincidan con la búsqueda.</p>
+        </div>
+      </section>
+
+      <!-- ================= DETALLE DE MOVIMIENTOS ================= -->
+      <section class="panel panel--detalle" aria-labelledby="detalle-titulo">
+        <div class="panel__cabecera panel__cabecera--detalle">
+          <h2 class="panel__titulo" id="detalle-titulo">
+            Detalle de <span id="detalle-tipo">Gastos</span>
+            <span class="panel__titulo-sufijo">( <span id="detalle-mes">Mes de Año</span> )</span>
+          </h2>
+          <span class="detalle__total">Total: <strong id="detalle-total">$0.00</strong></span>
+        </div>
+
+        <div class="pestanas" role="tablist" aria-label="Tipo de movimiento">
+          <button type="button" class="pestana pestana--activa" data-tab="gastos" role="tab" aria-selected="true">Gastos</button>
+          <button type="button" class="pestana" data-tab="ingresos" role="tab" aria-selected="false">Ingresos</button>
+          <button type="button" class="pestana" data-tab="ahorros" role="tab" aria-selected="false">Ahorros</button>
+        </div>
+
+        <!-- FEAT-003 inyecta aqui los movimientos del tipo activo -->
+        <div class="lista-tarjetas" id="lista-movimientos">
+          <!-- El texto del estado vacio cambia segun la pestana activa (FEAT-003) -->
+          <p class="estado-vacio" id="detalle-vacio">No hay gastos registrados este mes.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="pie">
+      <p>Panel de Control de Clientes · Datos guardados localmente en este navegador.</p>
+    </footer>
+  </div>
+
+  <!--
+    ================= PLANTILLA DE TARJETA DE CLIENTE / PAGO =================
+    Referencia visual para FEAT-003 (NO se renderiza por si sola, esta en
+    un <template>). FEAT-003 clonara esta estructura o generara HTML
+    equivalente. Botones: Avisar (WhatsApp), Pagar, editar, pausar/reanudar,
+    eliminar.
+  -->
+  <template id="tpl-tarjeta-cliente">
+    <article class="tarjeta tarjeta--cliente" data-id="">
+      <div class="tarjeta__cabecera">
+        <div class="tarjeta__identidad">
+          <h3 class="tarjeta__nombre"></h3>
+          <span class="tarjeta__megas"></span>
+        </div>
+        <span class="badge estado-pagado tarjeta__estado"></span>
+      </div>
+      <div class="tarjeta__datos">
+        <span class="tarjeta__monto"></span>
+        <span class="tarjeta__vence">Vence: <span class="tarjeta__fecha"></span></span>
+        <span class="etiqueta-tipo"></span>
+      </div>
+      <div class="tarjeta__acciones">
+        <button type="button" class="btn btn--chip accion-avisar">
+          <span aria-hidden="true">💬</span> Avisar
+        </button>
+        <button type="button" class="btn btn--chip btn--exito accion-pagar">
+          <span aria-hidden="true">✔️</span> Pagar
+        </button>
+        <button type="button" class="btn btn--icono accion-editar" title="Editar" aria-label="Editar">✏️</button>
+        <button type="button" class="btn btn--icono accion-pausar" title="Pausar / Reanudar" aria-label="Pausar o reanudar">⏸️</button>
+        <button type="button" class="btn btn--icono btn--peligro accion-eliminar" title="Eliminar" aria-label="Eliminar">🗑️</button>
+      </div>
+    </article>
+  </template>
+
+  <!-- ======================================================= -->
+  <!-- =====================  MODALES  ======================= -->
+  <!-- Todos ocultos por defecto con el atributo [hidden].     -->
+  <!-- Patron reutilizable: .modal > .modal__overlay + .modal__dialogo -->
+  <!-- ======================================================= -->
+
+  <!-- ----- Modal Cliente (crear / editar) ----- -->
+  <div class="modal" id="modal-cliente" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-cliente-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-cliente-titulo">Nuevo Cliente</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <form class="modal__cuerpo" id="form-cliente">
+        <input type="hidden" id="cliente-id" name="id" value="" />
+
+        <div class="campo-grupo">
+          <label class="campo-label" for="cliente-nombre">Nombre</label>
+          <input type="text" id="cliente-nombre" name="nombre" class="campo" required />
+        </div>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-celular">Celular</label>
+            <input type="tel" id="cliente-celular" name="celular" class="campo" inputmode="numeric" placeholder="10 dígitos" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-ip">IP</label>
+            <input type="text" id="cliente-ip" name="ip" class="campo" placeholder="192.168.1.100" />
+          </div>
+        </div>
+
+        <div class="campo-grupo">
+          <label class="campo-label" for="cliente-direccion">Dirección</label>
+          <input type="text" id="cliente-direccion" name="direccion" class="campo" />
+        </div>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-megas">Megas</label>
+            <input type="text" id="cliente-megas" name="megas" class="campo" placeholder="10 MB" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-monto">Monto (mensual)</label>
+            <input type="number" id="cliente-monto" name="monto" class="campo" min="0" step="1" value="500" />
+          </div>
+        </div>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-fecha-instalacion">Fecha de instalación</label>
+            <input type="date" id="cliente-fecha-instalacion" name="fechaInstalacion" class="campo" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-dia-pago">Día de pago</label>
+            <input type="number" id="cliente-dia-pago" name="diaPago" class="campo" min="1" max="31" placeholder="1-31" />
+          </div>
+        </div>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-tipo-pago">Tipo de pago</label>
+            <select id="cliente-tipo-pago" name="tipoPago" class="campo campo--select">
+              <option value="PTP">PTP</option>
+              <option value="Directo">Directo</option>
+            </select>
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-estatus">Estatus</label>
+            <select id="cliente-estatus" name="estatus" class="campo campo--select">
+              <option value="Activo">Activo</option>
+              <option value="Pausado">Pausado</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal__acciones">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn--primario">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ----- Modal Nuevo Gasto ----- -->
+  <div class="modal" id="modal-gasto" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-gasto-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-gasto-titulo">Nuevo Gasto</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <form class="modal__cuerpo" id="form-gasto">
+        <div class="campo-grupo">
+          <label class="campo-label" for="gasto-concepto">Concepto / descripción</label>
+          <input type="text" id="gasto-concepto" name="concepto" class="campo" required />
+        </div>
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="gasto-monto">Monto</label>
+            <input type="number" id="gasto-monto" name="monto" class="campo" min="0" step="1" required />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="gasto-fecha">Fecha</label>
+            <input type="date" id="gasto-fecha" name="fecha" class="campo" />
+          </div>
+        </div>
+        <div class="modal__acciones">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn--primario">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ----- Modal Nuevo Ingreso ----- -->
+  <div class="modal" id="modal-ingreso" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-ingreso-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-ingreso-titulo">Nuevo Ingreso</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <form class="modal__cuerpo" id="form-ingreso">
+        <div class="campo-grupo">
+          <label class="campo-label" for="ingreso-concepto">Concepto / descripción</label>
+          <input type="text" id="ingreso-concepto" name="concepto" class="campo" required />
+        </div>
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="ingreso-monto">Monto</label>
+            <input type="number" id="ingreso-monto" name="monto" class="campo" min="0" step="1" required />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="ingreso-fecha">Fecha</label>
+            <input type="date" id="ingreso-fecha" name="fecha" class="campo" />
+          </div>
+        </div>
+        <div class="modal__acciones">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn--primario">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ----- Modal Nuevo Ahorro ----- -->
+  <div class="modal" id="modal-ahorro" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-ahorro-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-ahorro-titulo">Nuevo Ahorro</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <form class="modal__cuerpo" id="form-ahorro">
+        <div class="campo-grupo">
+          <label class="campo-label" for="ahorro-concepto">Concepto / descripción</label>
+          <input type="text" id="ahorro-concepto" name="concepto" class="campo" required />
+        </div>
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="ahorro-monto">Monto</label>
+            <input type="number" id="ahorro-monto" name="monto" class="campo" min="0" step="1" required />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="ahorro-fecha">Fecha</label>
+            <input type="date" id="ahorro-fecha" name="fecha" class="campo" />
+          </div>
+        </div>
+        <div class="modal__acciones">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn--primario">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ----- Modal Configuracion ----- -->
+  <div class="modal" id="modal-config" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-config-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-config-titulo">Configuración</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <form class="modal__cuerpo" id="form-config">
+        <div class="campo-grupo">
+          <label class="campo-label" for="config-dias-aviso">Días de aviso antes del vencimiento</label>
+          <input type="number" id="config-dias-aviso" name="diasAviso" class="campo" min="0" max="30" value="3" />
+        </div>
+        <div class="campo-grupo">
+          <label class="campo-label" for="config-moneda">Moneda</label>
+          <select id="config-moneda" name="moneda" class="campo campo--select">
+            <option value="MXN">Peso mexicano (MXN)</option>
+            <option value="USD">Dólar (USD)</option>
+          </select>
+        </div>
+        <div class="campo-grupo">
+          <button type="button" id="btn-reiniciar-datos" class="btn btn--peligro-plano">
+            <span class="btn__icono" aria-hidden="true">♻️</span>
+            <span>Reiniciar datos de ejemplo</span>
+          </button>
+          <p class="campo-ayuda">Reemplaza todos los clientes y movimientos por el conjunto de datos de ejemplo.</p>
+        </div>
+        <div class="modal__acciones">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn--primario">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="app.js" defer></script>
 </body>
 </html>
