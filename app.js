@@ -789,3 +789,1101 @@
     }
   }
 })();
+
+/* ============================================================
+   Panel de Control de Clientes - Capa de interactividad (FEAT-003)
+   ------------------------------------------------------------
+   Esta IIFE consume el nucleo window.PCC (FEAT-001) y el DOM de
+   FEAT-002 para cablear TODA la interactividad:
+     - render() principal (resumen, estadisticas, pagos, clientes,
+       detalle de movimientos)
+     - Estado de UI en memoria (mes, busqueda, filtro, orden, pestana)
+     - Navegacion de mes, busqueda, chips de filtro con conteos, orden
+     - CRUD de clientes via modal + acciones por tarjeta
+       (Avisar WhatsApp, Pagar, editar, pausar/reanudar, eliminar)
+     - Movimientos (gasto / ingreso / ahorro)
+     - Exportar a CSV
+     - Modo oscuro persistente y modal de Configuracion
+   No reescribe el nucleo: se engancha tras DOMContentLoaded.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return; // Entorno sin DOM (ej. 'node --check'): no hacer nada.
+  }
+
+  var PCC = window.PCC;
+  if (!PCC) {
+    return; // El nucleo no esta disponible: abortar con seguridad.
+  }
+
+  /* ----------------------------------------------------------
+     Helpers cortos de DOM
+     ---------------------------------------------------------- */
+  function $(sel, ctx) {
+    return (ctx || document).querySelector(sel);
+  }
+  function $all(sel, ctx) {
+    return Array.prototype.slice.call((ctx || document).querySelectorAll(sel));
+  }
+
+  var MESES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+  ];
+
+  function nombreMesAnio(fecha) {
+    var mes = MESES[fecha.getMonth()] || "";
+    var titulo = mes.charAt(0).toUpperCase() + mes.slice(1);
+    return titulo + " de " + fecha.getFullYear();
+  }
+
+  function inicioDeMes(fecha) {
+    return new Date(fecha.getFullYear(), fecha.getMonth(), 1);
+  }
+
+  function finDeMes(fecha) {
+    return new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0);
+  }
+
+  function mismoMes(a, b) {
+    if (!a || !b) {
+      return false;
+    }
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+  }
+
+  /* ----------------------------------------------------------
+     Estado de UI en memoria
+     ---------------------------------------------------------- */
+  var estado = {
+    mesSeleccionado: inicioDeMes(new Date()),
+    terminoBusqueda: "",
+    filtroActivo: "todos",
+    ordenActual: "proximo",
+    pestanaMovimiento: "gastos"
+  };
+
+  // Fecha "hoy" fijada al cargar (coherencia entre calculos del render).
+  var HOY = new Date();
+
+  /* ----------------------------------------------------------
+     Acceso a datos (siempre desde localStorage via PCC)
+     ---------------------------------------------------------- */
+  function clientes() {
+    return PCC.cargarClientes();
+  }
+  function movimientos() {
+    return PCC.cargarMovimientos();
+  }
+  function clientePorId(id) {
+    var lista = clientes();
+    for (var i = 0; i < lista.length; i++) {
+      if (lista[i].id === id) {
+        return lista[i];
+      }
+    }
+    return null;
+  }
+
+  /* ----------------------------------------------------------
+     Normalizacion de celular para WhatsApp (MX)
+     ---------------------------------------------------------- */
+  function normalizarCelular(celular) {
+    var digitos = String(celular || "").replace(/\D+/g, "");
+    if (!digitos) {
+      return "";
+    }
+    // Si son 10 digitos (numero nacional MX), anteponer el codigo de pais 52.
+    if (digitos.length === 10) {
+      return "52" + digitos;
+    }
+    return digitos;
+  }
+
+  /* ==========================================================
+     RENDER PRINCIPAL
+     ========================================================== */
+  function render() {
+    var lista = clientes();
+    var movs = movimientos();
+    var cfg = PCC.cargarConfig();
+
+    renderResumen(lista, movs);
+    renderEstadisticas(lista, movs);
+    renderPagos(lista);
+    renderClientes(lista);
+    renderDetalle(movs);
+    renderBadgeAviso(cfg);
+  }
+
+  /* ---------------------- Resumen del mes ------------------- */
+  function renderResumen(lista, movs) {
+    var mes = estado.mesSeleccionado;
+    var tituloMes = nombreMesAnio(mes);
+    var elMesResumen = $("#resumen-mes");
+    if (elMesResumen) {
+      elMesResumen.textContent = tituloMes;
+    }
+    var elDetalleMes = $("#detalle-mes");
+    if (elDetalleMes) {
+      elDetalleMes.textContent = tituloMes;
+    }
+
+    var ingresos = 0;
+    var egresos = 0;
+    movs.forEach(function (m) {
+      var f = PCC.aFecha(m.fecha);
+      if (!f || !mismoMes(f, mes)) {
+        return;
+      }
+      var monto = Number(m.monto) || 0;
+      if (m.tipo === "ingreso") {
+        ingresos += monto;
+      } else if (m.tipo === "gasto") {
+        egresos += monto;
+      }
+    });
+
+    var ganancia = ingresos - egresos;
+
+    // Por cobrar: clientes activos cuyo proximo pago cae hasta fin del mes
+    // seleccionado y que no estan pagados (sin pago que cubra ese ciclo).
+    var finMes = PCC.aMedianoche(finDeMes(mes));
+    var porCobrar = 0;
+    lista.forEach(function (c) {
+      if (c.estatus !== "Activo") {
+        return;
+      }
+      var vence = PCC.aFecha(c.fechaProximoPago);
+      if (!vence) {
+        return;
+      }
+      if (PCC.aMedianoche(vence).getTime() <= finMes.getTime()) {
+        var est = PCC.estadoPago(c, HOY);
+        if (est.clase !== "pagado") {
+          porCobrar += Number(c.monto) || 0;
+        }
+      }
+    });
+
+    setTexto("#metrica-ingresos", PCC.formatoMoneda(ingresos));
+    setTexto("#metrica-egresos", PCC.formatoMoneda(egresos));
+    setTexto("#metrica-ganancia", PCC.formatoMoneda(ganancia));
+    setTexto("#metrica-porcobrar", PCC.formatoMoneda(porCobrar));
+  }
+
+  /* ---------------------- Estadisticas ---------------------- */
+  function renderEstadisticas(lista, movs) {
+    var mes = estado.mesSeleccionado;
+    var activos = 0;
+    var pausados = 0;
+    var corriente = 0;
+    var vencidos = 0;
+    var ptp = 0;
+    var directo = 0;
+
+    lista.forEach(function (c) {
+      if (c.estatus === "Pausado") {
+        pausados += 1;
+      } else {
+        activos += 1;
+      }
+      if (c.tipoPago === "PTP") {
+        ptp += 1;
+      } else if (c.tipoPago === "Directo") {
+        directo += 1;
+      }
+      var est = PCC.estadoPago(c, HOY);
+      if (est.clase === "vencido") {
+        vencidos += 1;
+      } else {
+        corriente += 1;
+      }
+    });
+
+    var cobrados = 0;
+    var ahorro = 0;
+    movs.forEach(function (m) {
+      var f = PCC.aFecha(m.fecha);
+      if (!f || !mismoMes(f, mes)) {
+        return;
+      }
+      if (m.tipo === "ingreso" && m.esPago) {
+        cobrados += 1;
+      }
+      if (m.tipo === "ahorro") {
+        ahorro += Number(m.monto) || 0;
+      }
+    });
+
+    setTexto("#stat-activos", String(activos));
+    setTexto("#stat-pausados", String(pausados));
+    setTexto("#stat-mes-corriente", String(corriente));
+    setTexto("#stat-mes-vencidos", String(vencidos));
+    setTexto("#stat-mes-cobrados", String(cobrados));
+    setTexto("#stat-mes-ptp", String(ptp));
+    setTexto("#stat-mes-directo", String(directo));
+    setTexto("#stat-mes-ahorro", PCC.formatoMoneda(ahorro));
+  }
+
+  /* ---------------------- Pagos proximos/vencidos ----------- */
+  function renderPagos(lista) {
+    var contenedor = $("#lista-pagos");
+    var vacio = $("#pagos-vacio");
+    if (!contenedor) {
+      return;
+    }
+
+    // Solo clientes vencidos o proximos (dentro de la ventana de aviso).
+    var pendientes = lista.filter(function (c) {
+      if (c.estatus !== "Activo") {
+        return false;
+      }
+      var est = PCC.estadoPago(c, HOY);
+      return est.clase === "vencido" || est.clase === "proximo";
+    });
+
+    // Ordenar por urgencia: menos dias restantes primero (mas vencido antes).
+    pendientes.sort(function (a, b) {
+      return PCC.diasRestantes(a, HOY) - PCC.diasRestantes(b, HOY);
+    });
+
+    // Resumen de la cabecera: numero de vencidos y suma de sus montos.
+    var numVencidos = 0;
+    var montoVencidos = 0;
+    pendientes.forEach(function (c) {
+      var est = PCC.estadoPago(c, HOY);
+      if (est.clase === "vencido") {
+        numVencidos += 1;
+        montoVencidos += Number(c.monto) || 0;
+      }
+    });
+    setTexto("#pagos-resumen-num", String(numVencidos));
+    setTexto("#pagos-resumen-monto", PCC.formatoMoneda(montoVencidos));
+
+    limpiarTarjetas(contenedor, vacio);
+
+    if (pendientes.length === 0) {
+      if (vacio) {
+        vacio.hidden = false;
+      }
+      return;
+    }
+    if (vacio) {
+      vacio.hidden = true;
+    }
+    pendientes.forEach(function (c) {
+      contenedor.appendChild(crearTarjeta(c));
+    });
+  }
+
+  /* ---------------------- Clientes (busqueda/filtro/orden) -- */
+  function renderClientes(lista) {
+    // Conteos de los chips (sobre toda la cartera, independientes de la
+    // busqueda, para que reflejen la totalidad por categoria).
+    var conteos = {
+      todos: lista.length,
+      activos: 0,
+      pausados: 0,
+      vencidos: 0,
+      ptp: 0,
+      directo: 0
+    };
+    lista.forEach(function (c) {
+      if (c.estatus === "Pausado") {
+        conteos.pausados += 1;
+      } else {
+        conteos.activos += 1;
+      }
+      if (c.tipoPago === "PTP") {
+        conteos.ptp += 1;
+      } else if (c.tipoPago === "Directo") {
+        conteos.directo += 1;
+      }
+      if (PCC.estadoPago(c, HOY).clase === "vencido") {
+        conteos.vencidos += 1;
+      }
+    });
+    setTexto("#cuenta-todos", String(conteos.todos));
+    setTexto("#cuenta-activos", String(conteos.activos));
+    setTexto("#cuenta-pausados", String(conteos.pausados));
+    setTexto("#cuenta-vencidos", String(conteos.vencidos));
+    setTexto("#cuenta-ptp", String(conteos.ptp));
+    setTexto("#cuenta-directo", String(conteos.directo));
+
+    // Aplicar filtro por chip.
+    var filtrados = lista.filter(function (c) {
+      switch (estado.filtroActivo) {
+        case "activos":
+          return c.estatus === "Activo";
+        case "pausados":
+          return c.estatus === "Pausado";
+        case "vencidos":
+          return PCC.estadoPago(c, HOY).clase === "vencido";
+        case "ptp":
+          return c.tipoPago === "PTP";
+        case "directo":
+          return c.tipoPago === "Directo";
+        default:
+          return true;
+      }
+    });
+
+    // Aplicar busqueda (nombre / celular / direccion / ip).
+    var termino = estado.terminoBusqueda.trim().toLowerCase();
+    if (termino) {
+      filtrados = filtrados.filter(function (c) {
+        var campos = [c.nombre, c.celular, c.direccion, c.ip];
+        return campos.some(function (v) {
+          return String(v || "").toLowerCase().indexOf(termino) !== -1;
+        });
+      });
+    }
+
+    // Aplicar orden.
+    filtrados.sort(function (a, b) {
+      if (estado.ordenActual === "nombre") {
+        return String(a.nombre).localeCompare(String(b.nombre), "es");
+      }
+      if (estado.ordenActual === "monto") {
+        return (Number(b.monto) || 0) - (Number(a.monto) || 0);
+      }
+      // 'proximo' (default): por dias restantes ascendente (urgencia).
+      return PCC.diasRestantes(a, HOY) - PCC.diasRestantes(b, HOY);
+    });
+
+    var contenedor = $("#lista-clientes");
+    var vacio = $("#clientes-vacio");
+    if (!contenedor) {
+      return;
+    }
+    limpiarTarjetas(contenedor, vacio);
+
+    if (filtrados.length === 0) {
+      if (vacio) {
+        vacio.hidden = false;
+      }
+      return;
+    }
+    if (vacio) {
+      vacio.hidden = true;
+    }
+    filtrados.forEach(function (c) {
+      contenedor.appendChild(crearTarjeta(c));
+    });
+  }
+
+  /* ---------------------- Detalle de movimientos ------------ */
+  function renderDetalle(movs) {
+    var tab = estado.pestanaMovimiento; // 'gastos' | 'ingresos' | 'ahorros'
+    var tipo = tab === "gastos" ? "gasto" : tab === "ingresos" ? "ingreso" : "ahorro";
+    var etiqueta =
+      tab === "gastos" ? "Gastos" : tab === "ingresos" ? "Ingresos" : "Ahorros";
+    setTexto("#detalle-tipo", etiqueta);
+
+    var mes = estado.mesSeleccionado;
+    var delMes = movs.filter(function (m) {
+      if (m.tipo !== tipo) {
+        return false;
+      }
+      var f = PCC.aFecha(m.fecha);
+      return f && mismoMes(f, mes);
+    });
+
+    // Mas recientes primero.
+    delMes.sort(function (a, b) {
+      var fa = PCC.aFecha(a.fecha);
+      var fb = PCC.aFecha(b.fecha);
+      return (fb ? fb.getTime() : 0) - (fa ? fa.getTime() : 0);
+    });
+
+    var total = delMes.reduce(function (acc, m) {
+      return acc + (Number(m.monto) || 0);
+    }, 0);
+    setTexto("#detalle-total", PCC.formatoMoneda(total));
+
+    var contenedor = $("#lista-movimientos");
+    var vacio = $("#detalle-vacio");
+    if (!contenedor) {
+      return;
+    }
+    limpiarTarjetas(contenedor, vacio);
+
+    if (delMes.length === 0) {
+      if (vacio) {
+        vacio.textContent =
+          tab === "gastos"
+            ? "No hay gastos registrados este mes."
+            : tab === "ingresos"
+            ? "No hay ingresos registrados este mes."
+            : "No hay ahorros registrados este mes.";
+        vacio.hidden = false;
+      }
+      return;
+    }
+    if (vacio) {
+      vacio.hidden = true;
+    }
+    delMes.forEach(function (m) {
+      contenedor.appendChild(crearTarjetaMovimiento(m));
+    });
+  }
+
+  function renderBadgeAviso(cfg) {
+    var dias = cfg && cfg.diasAviso != null ? Number(cfg.diasAviso) : 3;
+    setTexto("#pagos-badge-aviso", "Aviso: " + dias + (dias === 1 ? " día antes" : " días antes"));
+  }
+
+  /* ==========================================================
+     CONSTRUCCION DE TARJETAS
+     ========================================================== */
+  var tplTarjeta = $("#tpl-tarjeta-cliente");
+
+  function crearTarjeta(cliente) {
+    var frag = tplTarjeta.content.cloneNode(true);
+    var art = frag.querySelector(".tarjeta");
+    var est = PCC.estadoPago(cliente, HOY);
+
+    art.setAttribute("data-id", cliente.id);
+    art.classList.add("tarjeta--" + est.clase);
+
+    $(".tarjeta__nombre", art).textContent = cliente.nombre || "(sin nombre)";
+    $(".tarjeta__megas", art).textContent =
+      (cliente.megas || "") + (cliente.estatus === "Pausado" ? " · Pausado" : "");
+
+    var badge = $(".tarjeta__estado", art);
+    badge.className = "badge tarjeta__estado estado-" + est.clase;
+    badge.textContent = est.texto;
+
+    $(".tarjeta__monto", art).textContent = PCC.formatoMoneda(cliente.monto);
+    $(".tarjeta__fecha", art).textContent = PCC.formatoFechaLarga(
+      cliente.fechaProximoPago
+    );
+    $(".etiqueta-tipo", art).textContent = cliente.tipoPago || "";
+
+    // Texto del boton pausar/reanudar segun estatus.
+    var btnPausar = $(".accion-pausar", art);
+    if (btnPausar) {
+      if (cliente.estatus === "Pausado") {
+        btnPausar.textContent = "▶️";
+        btnPausar.title = "Reanudar";
+        btnPausar.setAttribute("aria-label", "Reanudar");
+      } else {
+        btnPausar.textContent = "⏸️";
+        btnPausar.title = "Pausar";
+        btnPausar.setAttribute("aria-label", "Pausar");
+      }
+    }
+
+    return frag;
+  }
+
+  function crearTarjetaMovimiento(mov) {
+    var art = document.createElement("article");
+    art.className = "tarjeta tarjeta--movimiento";
+    var claseMonto =
+      mov.tipo === "gasto" ? "estado-vencido" : mov.tipo === "ingreso" ? "estado-pagado" : "estado-proximo";
+
+    var cabecera = document.createElement("div");
+    cabecera.className = "tarjeta__cabecera";
+
+    var identidad = document.createElement("div");
+    identidad.className = "tarjeta__identidad";
+    var nombre = document.createElement("h3");
+    nombre.className = "tarjeta__nombre";
+    nombre.textContent = mov.concepto || "(sin concepto)";
+    var fecha = document.createElement("span");
+    fecha.className = "tarjeta__megas";
+    fecha.textContent = PCC.formatoFechaLarga(mov.fecha);
+    identidad.appendChild(nombre);
+    identidad.appendChild(fecha);
+
+    var badge = document.createElement("span");
+    badge.className = "badge " + claseMonto;
+    badge.textContent = PCC.formatoMoneda(mov.monto);
+
+    cabecera.appendChild(identidad);
+    cabecera.appendChild(badge);
+    art.appendChild(cabecera);
+    return art;
+  }
+
+  /* ==========================================================
+     UTILIDADES DE RENDER
+     ========================================================== */
+  function setTexto(sel, texto) {
+    var el = $(sel);
+    if (el) {
+      el.textContent = texto;
+    }
+  }
+
+  // Elimina las tarjetas renderizadas conservando el nodo de estado vacio.
+  function limpiarTarjetas(contenedor, nodoVacio) {
+    var hijos = Array.prototype.slice.call(contenedor.children);
+    hijos.forEach(function (h) {
+      if (h !== nodoVacio) {
+        contenedor.removeChild(h);
+      }
+    });
+  }
+
+  /* ==========================================================
+     ACCIONES SOBRE CLIENTES
+     ========================================================== */
+  function accionAvisar(cliente) {
+    var tel = normalizarCelular(cliente.celular);
+    if (!tel) {
+      window.alert("Este cliente no tiene un número de celular registrado.");
+      return;
+    }
+    var est = PCC.estadoPago(cliente, HOY);
+    var venceTxt = PCC.formatoFechaLarga(cliente.fechaProximoPago);
+    var montoTxt = PCC.formatoMoneda(cliente.monto);
+    var mensaje =
+      "Hola " +
+      (cliente.nombre || "") +
+      ", le recordamos su pago de internet por " +
+      montoTxt +
+      ". Fecha de vencimiento: " +
+      venceTxt +
+      ". " +
+      (est.clase === "vencido"
+        ? "Su pago está vencido, agradecemos ponerse al corriente. "
+        : "") +
+      "¡Gracias!";
+    var url =
+      "https://wa.me/" + tel + "?text=" + encodeURIComponent(mensaje);
+    window.open(url, "_blank");
+  }
+
+  function accionPagar(cliente) {
+    var lista = clientes();
+    var idx = -1;
+    for (var i = 0; i < lista.length; i++) {
+      if (lista[i].id === cliente.id) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx === -1) {
+      return;
+    }
+    var c = lista[idx];
+    var hoyISO = PCC.fechaISO(new Date());
+
+    // Registrar el movimiento de ingreso (pago).
+    var movs = movimientos();
+    movs.push({
+      id: PCC.generarId(),
+      tipo: "ingreso",
+      esPago: true,
+      concepto: "Pago de " + (c.nombre || "cliente"),
+      monto: Number(c.monto) || 0,
+      fecha: hoyISO
+    });
+    PCC.guardarMovimientos(movs);
+
+    // Actualizar ultimoPago y recalcular proximo ciclo.
+    c.ultimoPago = hoyISO;
+    c.fechaProximoPago = PCC.fechaISO(PCC.calcularProximoPago(c, new Date()));
+    PCC.guardarClientes(lista);
+
+    render();
+  }
+
+  function accionPausar(cliente) {
+    var lista = clientes();
+    lista.forEach(function (c) {
+      if (c.id === cliente.id) {
+        c.estatus = c.estatus === "Pausado" ? "Activo" : "Pausado";
+      }
+    });
+    PCC.guardarClientes(lista);
+    render();
+  }
+
+  function accionEliminar(cliente) {
+    var ok = window.confirm(
+      '¿Eliminar al cliente "' + (cliente.nombre || "") + '"? Esta acción no se puede deshacer.'
+    );
+    if (!ok) {
+      return;
+    }
+    var lista = clientes().filter(function (c) {
+      return c.id !== cliente.id;
+    });
+    PCC.guardarClientes(lista);
+    render();
+  }
+
+  /* ==========================================================
+     MODAL CLIENTE (crear / editar)
+     ========================================================== */
+  function abrirModalCliente(cliente) {
+    var form = $("#form-cliente");
+    if (form) {
+      form.reset();
+    }
+    var titulo = $("#modal-cliente-titulo");
+    setValor("#cliente-id", cliente ? cliente.id : "");
+
+    if (cliente) {
+      if (titulo) {
+        titulo.textContent = "Editar Cliente";
+      }
+      setValor("#cliente-nombre", cliente.nombre);
+      setValor("#cliente-celular", cliente.celular);
+      setValor("#cliente-direccion", cliente.direccion);
+      setValor("#cliente-ip", cliente.ip);
+      setValor("#cliente-megas", cliente.megas);
+      setValor("#cliente-monto", cliente.monto);
+      setValor("#cliente-fecha-instalacion", cliente.fechaInstalacion);
+      setValor("#cliente-dia-pago", cliente.diaPago);
+      setValor("#cliente-tipo-pago", cliente.tipoPago);
+      setValor("#cliente-estatus", cliente.estatus);
+    } else {
+      if (titulo) {
+        titulo.textContent = "Nuevo Cliente";
+      }
+      setValor("#cliente-monto", PCC.MONTO_DEFAULT);
+      setValor("#cliente-tipo-pago", "PTP");
+      setValor("#cliente-estatus", "Activo");
+    }
+    abrirModal("#modal-cliente");
+  }
+
+  function guardarCliente(ev) {
+    ev.preventDefault();
+    var nombre = (valor("#cliente-nombre") || "").trim();
+    var celular = (valor("#cliente-celular") || "").trim();
+    var montoRaw = valor("#cliente-monto");
+    var diaPagoRaw = valor("#cliente-dia-pago");
+
+    // Validacion de requeridos con mensajes en espanol.
+    var errores = [];
+    if (!nombre) {
+      errores.push("El nombre es obligatorio.");
+    }
+    if (!celular.replace(/\D+/g, "")) {
+      errores.push("El celular es obligatorio.");
+    }
+    if (montoRaw === "" || isNaN(Number(montoRaw)) || Number(montoRaw) < 0) {
+      errores.push("El monto debe ser un número válido.");
+    }
+    var diaPago = Number(diaPagoRaw);
+    if (diaPagoRaw === "" || isNaN(diaPago) || diaPago < 1 || diaPago > 31) {
+      errores.push("El día de pago debe estar entre 1 y 31.");
+    }
+    if (errores.length) {
+      window.alert(errores.join("\n"));
+      return;
+    }
+
+    var id = valor("#cliente-id");
+    var datos = {
+      id: id || undefined,
+      nombre: nombre,
+      celular: celular,
+      direccion: (valor("#cliente-direccion") || "").trim(),
+      ip: (valor("#cliente-ip") || "").trim(),
+      megas: (valor("#cliente-megas") || "").trim(),
+      monto: Number(montoRaw),
+      fechaInstalacion: valor("#cliente-fecha-instalacion") || "",
+      diaPago: diaPago,
+      tipoPago: valor("#cliente-tipo-pago"),
+      estatus: valor("#cliente-estatus")
+    };
+
+    var lista = clientes();
+    if (id) {
+      // Edicion: conservar ultimoPago / fechaProximoPago existentes.
+      var existente = null;
+      for (var i = 0; i < lista.length; i++) {
+        if (lista[i].id === id) {
+          existente = lista[i];
+          break;
+        }
+      }
+      if (existente) {
+        datos.ultimoPago = existente.ultimoPago || "";
+        // Recalcular fechaProximoPago con el diaPago nuevo.
+      }
+      var actualizado = PCC.crearCliente(datos);
+      lista = lista.map(function (c) {
+        return c.id === id ? actualizado : c;
+      });
+    } else {
+      lista.push(PCC.crearCliente(datos));
+    }
+    PCC.guardarClientes(lista);
+    cerrarModales();
+    render();
+  }
+
+  /* ==========================================================
+     MODALES DE MOVIMIENTOS (gasto / ingreso / ahorro)
+     ========================================================== */
+  function abrirModalMovimiento(tipo) {
+    var mapa = {
+      gasto: { modal: "#modal-gasto", fecha: "#gasto-fecha" },
+      ingreso: { modal: "#modal-ingreso", fecha: "#ingreso-fecha" },
+      ahorro: { modal: "#modal-ahorro", fecha: "#ahorro-fecha" }
+    };
+    var cfg = mapa[tipo];
+    if (!cfg) {
+      return;
+    }
+    var form = $(cfg.modal + " form");
+    if (form) {
+      form.reset();
+    }
+    setValor(cfg.fecha, PCC.fechaISO(new Date()));
+    abrirModal(cfg.modal);
+  }
+
+  function guardarMovimiento(tipo, prefijo, ev) {
+    ev.preventDefault();
+    var concepto = (valor("#" + prefijo + "-concepto") || "").trim();
+    var montoRaw = valor("#" + prefijo + "-monto");
+    var fecha = valor("#" + prefijo + "-fecha");
+
+    var errores = [];
+    if (!concepto) {
+      errores.push("El concepto es obligatorio.");
+    }
+    if (montoRaw === "" || isNaN(Number(montoRaw)) || Number(montoRaw) < 0) {
+      errores.push("El monto debe ser un número válido.");
+    }
+    if (errores.length) {
+      window.alert(errores.join("\n"));
+      return;
+    }
+
+    var movs = movimientos();
+    movs.push({
+      id: PCC.generarId(),
+      tipo: tipo,
+      concepto: concepto,
+      monto: Number(montoRaw),
+      fecha: fecha ? PCC.fechaISO(fecha) : PCC.fechaISO(new Date())
+    });
+    PCC.guardarMovimientos(movs);
+    cerrarModales();
+
+    // Mostrar la pestana correspondiente al movimiento recien creado.
+    estado.pestanaMovimiento =
+      tipo === "gasto" ? "gastos" : tipo === "ingreso" ? "ingresos" : "ahorros";
+    sincronizarPestanas();
+    render();
+  }
+
+  /* ==========================================================
+     MODAL CONFIGURACION
+     ========================================================== */
+  function abrirModalConfig() {
+    var cfg = PCC.cargarConfig();
+    setValor("#config-dias-aviso", cfg.diasAviso);
+    setValor("#config-moneda", cfg.moneda);
+    abrirModal("#modal-config");
+  }
+
+  function guardarConfig(ev) {
+    ev.preventDefault();
+    var diasRaw = valor("#config-dias-aviso");
+    var dias = Number(diasRaw);
+    if (diasRaw === "" || isNaN(dias) || dias < 0 || dias > 30) {
+      window.alert("Los días de aviso deben estar entre 0 y 30.");
+      return;
+    }
+    PCC.guardarConfig({
+      diasAviso: dias,
+      moneda: valor("#config-moneda") || "MXN"
+    });
+    cerrarModales();
+    render();
+  }
+
+  function reiniciarDatos() {
+    var ok = window.confirm(
+      "¿Reiniciar todos los datos de ejemplo? Se reemplazarán los clientes y movimientos actuales."
+    );
+    if (!ok) {
+      return;
+    }
+    PCC.reiniciarDatosEjemplo();
+    cerrarModales();
+    render();
+  }
+
+  /* ==========================================================
+     EXPORTAR A CSV
+     ========================================================== */
+  function escaparCSV(valor) {
+    var s = valor == null ? "" : String(valor);
+    if (/[",\n]/.test(s)) {
+      s = '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  function exportarCSV() {
+    var cabeceras = [
+      "Nombre", "Celular", "Dirección", "IP", "Megas", "Monto",
+      "Fecha instalación", "Día de pago", "Tipo", "Estatus", "Próximo pago"
+    ];
+    var filas = [cabeceras.map(escaparCSV).join(",")];
+    clientes().forEach(function (c) {
+      var fila = [
+        c.nombre,
+        c.celular,
+        c.direccion,
+        c.ip,
+        c.megas,
+        c.monto,
+        c.fechaInstalacion ? PCC.formatoFechaCorta(c.fechaInstalacion) : "",
+        c.diaPago,
+        c.tipoPago,
+        c.estatus,
+        c.fechaProximoPago ? PCC.formatoFechaCorta(c.fechaProximoPago) : ""
+      ];
+      filas.push(fila.map(escaparCSV).join(","));
+    });
+
+    // BOM para que Excel reconozca UTF-8 (acentos).
+    var contenido = "\ufeff" + filas.join("\r\n");
+    var blob = new Blob([contenido], { type: "text/csv;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "clientes.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Liberar la URL del objeto tras un breve lapso (compatible con file://).
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  /* ==========================================================
+     MODO OSCURO
+     ========================================================== */
+  function aplicarTema() {
+    var tema = PCC.getTheme();
+    document.documentElement.setAttribute("data-theme", tema);
+    var icono = $("#btn-tema-icono");
+    if (icono) {
+      // En modo oscuro mostramos el sol (para volver a claro) y viceversa.
+      icono.textContent = tema === "oscuro" ? "☀️" : "🌙";
+    }
+  }
+
+  function alternarTema() {
+    var nuevo = PCC.getTheme() === "oscuro" ? "claro" : "oscuro";
+    PCC.setTheme(nuevo);
+    aplicarTema();
+  }
+
+  /* ==========================================================
+     HELPERS DE MODALES Y CAMPOS
+     ========================================================== */
+  function abrirModal(sel) {
+    var modal = $(sel);
+    if (modal) {
+      modal.hidden = false;
+    }
+  }
+
+  function cerrarModales() {
+    $all(".modal").forEach(function (m) {
+      m.hidden = true;
+    });
+  }
+
+  function valor(sel) {
+    var el = $(sel);
+    return el ? el.value : "";
+  }
+
+  function setValor(sel, v) {
+    var el = $(sel);
+    if (el) {
+      el.value = v == null ? "" : v;
+    }
+  }
+
+  function sincronizarPestanas() {
+    $all(".pestana").forEach(function (p) {
+      var activa = p.getAttribute("data-tab") === estado.pestanaMovimiento;
+      p.classList.toggle("pestana--activa", activa);
+      p.setAttribute("aria-selected", activa ? "true" : "false");
+    });
+  }
+
+  function sincronizarChips() {
+    $all(".chip").forEach(function (chip) {
+      var activo = chip.getAttribute("data-filtro") === estado.filtroActivo;
+      chip.classList.toggle("chip--activo", activo);
+    });
+  }
+
+  /* ==========================================================
+     ENGANCHE DE EVENT LISTENERS
+     ========================================================== */
+  function engancharListeners() {
+    // Header
+    on("#btn-config", "click", abrirModalConfig);
+    on("#btn-nuevo-ahorro", "click", function () {
+      abrirModalMovimiento("ahorro");
+    });
+    on("#btn-nuevo-gasto", "click", function () {
+      abrirModalMovimiento("gasto");
+    });
+    on("#btn-nuevo-cliente", "click", function () {
+      abrirModalCliente(null);
+    });
+    on("#btn-tema", "click", alternarTema);
+
+    // Navegacion de mes
+    on("#btn-mes-prev", "click", function () {
+      estado.mesSeleccionado = new Date(
+        estado.mesSeleccionado.getFullYear(),
+        estado.mesSeleccionado.getMonth() - 1,
+        1
+      );
+      render();
+    });
+    on("#btn-mes-next", "click", function () {
+      estado.mesSeleccionado = new Date(
+        estado.mesSeleccionado.getFullYear(),
+        estado.mesSeleccionado.getMonth() + 1,
+        1
+      );
+      render();
+    });
+
+    // Busqueda
+    on("#buscador", "input", function (ev) {
+      estado.terminoBusqueda = ev.target.value || "";
+      renderClientes(clientes());
+    });
+
+    // Chips de filtro
+    $all(".chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        estado.filtroActivo = chip.getAttribute("data-filtro") || "todos";
+        sincronizarChips();
+        renderClientes(clientes());
+      });
+    });
+
+    // Orden
+    on("#orden-clientes", "change", function (ev) {
+      estado.ordenActual = ev.target.value || "proximo";
+      renderClientes(clientes());
+    });
+
+    // Exportar CSV
+    on("#btn-exportar-csv", "click", exportarCSV);
+
+    // Pestanas de detalle
+    $all(".pestana").forEach(function (p) {
+      p.addEventListener("click", function () {
+        estado.pestanaMovimiento = p.getAttribute("data-tab") || "gastos";
+        sincronizarPestanas();
+        renderDetalle(movimientos());
+      });
+    });
+
+    // Acciones por tarjeta (delegacion en los contenedores de listas).
+    [$("#lista-pagos"), $("#lista-clientes")].forEach(function (cont) {
+      if (!cont) {
+        return;
+      }
+      cont.addEventListener("click", function (ev) {
+        var boton = ev.target.closest("button");
+        if (!boton) {
+          return;
+        }
+        var tarjeta = ev.target.closest(".tarjeta");
+        if (!tarjeta) {
+          return;
+        }
+        var id = tarjeta.getAttribute("data-id");
+        var cliente = clientePorId(id);
+        if (!cliente) {
+          return;
+        }
+        if (boton.classList.contains("accion-avisar")) {
+          accionAvisar(cliente);
+        } else if (boton.classList.contains("accion-pagar")) {
+          accionPagar(cliente);
+        } else if (boton.classList.contains("accion-editar")) {
+          abrirModalCliente(cliente);
+        } else if (boton.classList.contains("accion-pausar")) {
+          accionPausar(cliente);
+        } else if (boton.classList.contains("accion-eliminar")) {
+          accionEliminar(cliente);
+        }
+      });
+    });
+
+    // Formularios de modales
+    on("#form-cliente", "submit", guardarCliente);
+    on("#form-gasto", "submit", function (ev) {
+      guardarMovimiento("gasto", "gasto", ev);
+    });
+    on("#form-ingreso", "submit", function (ev) {
+      guardarMovimiento("ingreso", "ingreso", ev);
+    });
+    on("#form-ahorro", "submit", function (ev) {
+      guardarMovimiento("ahorro", "ahorro", ev);
+    });
+    on("#form-config", "submit", guardarConfig);
+    on("#btn-reiniciar-datos", "click", reiniciarDatos);
+
+    // Cierre de modales (botones/overlay con data-cerrar-modal).
+    $all("[data-cerrar-modal]").forEach(function (el) {
+      el.addEventListener("click", cerrarModales);
+    });
+
+    // Cerrar modal con Escape.
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") {
+        cerrarModales();
+      }
+    });
+  }
+
+  function on(sel, evento, handler) {
+    var el = $(sel);
+    if (el) {
+      el.addEventListener(evento, handler);
+    }
+  }
+
+  /* ==========================================================
+     ARRANQUE
+     ========================================================== */
+  function iniciar() {
+    // Por si el nucleo no pudo sembrar en la carga inicial (timing).
+    try {
+      PCC.sembrarSiHaceFalta();
+    } catch (e) {}
+
+    aplicarTema();
+    sincronizarChips();
+    sincronizarPestanas();
+    engancharListeners();
+    render();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", iniciar);
+  } else {
+    iniciar();
+  }
+})();
