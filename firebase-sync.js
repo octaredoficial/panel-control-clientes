@@ -176,6 +176,34 @@ import {
   var _subscripciones = [];
   var _sembradoVerificado = false;
 
+  // CACHE del ultimo estado espejado por coleccion (issue 1 / issue 5).
+  // Mapa docId(string) -> JSON serializado del documento. Nos permite:
+  //   (a) escribir SOLO el delta (altas/modificados) y borrar SOLO lo
+  //       realmente eliminado, en vez de reescribir toda la coleccion;
+  //   (b) no borrar en remoto a menos que tengamos una referencia fiable
+  //       del estado previo (nunca borramos contra un snapshot incompleto,
+  //       porque la cache se alimenta tanto de escrituras locales como de
+  //       snapshots remotos aplicados).
+  // La cache arranca en null = "aun no conocemos el estado remoto": en ese
+  // caso NO borramos nada (solo altas/upserts), evitando borrados implicitos.
+  var _cacheColeccion = {};
+  _cacheColeccion[COL_CLIENTES] = null;
+  _cacheColeccion[COL_MOVIMIENTOS] = null;
+
+  // Limite duro de operaciones por writeBatch en Firestore.
+  var MAX_OPS_BATCH = 500;
+
+  // Construye un mapa id->JSON a partir de un array de documentos.
+  function indexarPorId(arr) {
+    var mapa = {};
+    (Array.isArray(arr) ? arr : []).forEach(function (item) {
+      if (item && item.id != null) {
+        mapa[String(item.id)] = JSON.stringify(item);
+      }
+    });
+    return mapa;
+  }
+
   function refrescarUI() {
     try {
       if (window.PCC && window.PCC.UI && typeof window.PCC.UI.render === "function") {
@@ -202,43 +230,85 @@ import {
      ESCRITURA: espejar el estado local a Firestore.
      -------------------------------------------------------- */
 
-  // Sincroniza una coleccion (clientes / movimientos) con el array dado:
-  // escribe/mergea cada doc por su id y borra los que ya no existen.
-  function espejarColeccion(nombreCol, arr) {
-    arr = Array.isArray(arr) ? arr : [];
-    getDocs(collection(db, nombreCol))
-      .then(function (snap) {
-        var idsActuales = {};
-        arr.forEach(function (item) {
-          if (item && item.id != null) {
-            idsActuales[String(item.id)] = true;
-          }
-        });
-
+  // Divide una lista de operaciones (funciones que reciben un batch) en
+  // varios writeBatch de como maximo MAX_OPS_BATCH ops y las ejecuta en
+  // serie. Devuelve una promesa que resuelve cuando todas confirmaron.
+  function ejecutarEnBatches(ops) {
+    if (!ops.length) {
+      return Promise.resolve();
+    }
+    var grupos = [];
+    for (var i = 0; i < ops.length; i += MAX_OPS_BATCH) {
+      grupos.push(ops.slice(i, i + MAX_OPS_BATCH));
+    }
+    return grupos.reduce(function (cadena, grupo) {
+      return cadena.then(function () {
         var batch = writeBatch(db);
-        // Altas / actualizaciones.
-        arr.forEach(function (item) {
-          if (item && item.id != null) {
-            batch.set(doc(db, nombreCol, String(item.id)), item);
-          }
-        });
-        // Bajas: docs remotos que ya no estan en el array local.
-        snap.forEach(function (d) {
-          if (!idsActuales[d.id]) {
-            batch.delete(doc(db, nombreCol, d.id));
-          }
+        grupo.forEach(function (aplicar) {
+          aplicar(batch);
         });
         return batch.commit();
-      })
-      .catch(function () {
-        // Error de red/escritura: la UI ya reflejo el cambio localmente.
       });
+    }, Promise.resolve());
+  }
+
+  // Sincroniza una coleccion (clientes / movimientos) con el array dado
+  // ESCRIBIENDO SOLO EL DELTA respecto a la ultima cache conocida:
+  //   - set   de los docs anadidos o cuyo contenido cambio;
+  //   - delete SOLO de los que estaban en la cache previa y ya no estan.
+  // Si no hay cache fiable (null = aun no conocemos el estado remoto),
+  // hacemos upsert de todo pero NO borramos nada (evita borrados
+  // implicitos contra un espejo a medio poblar; issue 5).
+  function espejarColeccion(nombreCol, arr) {
+    arr = Array.isArray(arr) ? arr : [];
+    var nuevo = indexarPorId(arr);
+    var previo = _cacheColeccion[nombreCol];
+    var ops = [];
+
+    // Altas / modificaciones: solo lo que cambio frente a la cache.
+    Object.keys(nuevo).forEach(function (id) {
+      if (!previo || previo[id] !== nuevo[id]) {
+        var item = JSON.parse(nuevo[id]);
+        ops.push(function (batch) {
+          batch.set(doc(db, nombreCol, id), item);
+        });
+      }
+    });
+
+    // Bajas: solo si teniamos una cache fiable del estado previo.
+    if (previo) {
+      Object.keys(previo).forEach(function (id) {
+        if (!nuevo[id]) {
+          ops.push(function (batch) {
+            batch.delete(doc(db, nombreCol, id));
+          });
+        }
+      });
+    }
+
+    // Actualizamos la cache de inmediato (optimista): refleja la intencion
+    // local; un snapshot remoto posterior la volvera a alinear.
+    _cacheColeccion[nombreCol] = nuevo;
+
+    if (!ops.length) {
+      return;
+    }
+    ejecutarEnBatches(ops).catch(function (e) {
+      console.warn(
+        "[firebase-sync] No se pudo espejar la coleccion '" +
+          nombreCol +
+          "' a Firestore:",
+        e
+      );
+    });
   }
 
   function espejarConfig(cfg) {
     setDoc(doc(db, DOC_CONFIG_APP.col, DOC_CONFIG_APP.id), cfg || {}, {
       merge: true
-    }).catch(function () {});
+    }).catch(function (e) {
+      console.warn("[firebase-sync] No se pudo espejar la configuracion:", e);
+    });
   }
 
   function espejarTema(valor) {
@@ -246,7 +316,9 @@ import {
       doc(db, DOC_CONFIG_THEME.col, DOC_CONFIG_THEME.id),
       { valor: valor === "oscuro" ? "oscuro" : "claro" },
       { merge: true }
-    ).catch(function () {});
+    ).catch(function (e) {
+      console.warn("[firebase-sync] No se pudo espejar el tema:", e);
+    });
   }
 
   // Parchea los setters de PCC para que, ademas de su comportamiento
@@ -290,6 +362,21 @@ import {
     };
   }
 
+  // Restaura los setters ORIGINALES de PCC (issue 3). Se invoca al cerrar
+  // sesion para que una escritura local sin auth NO intente ir a Firestore
+  // (las reglas la rechazarian y seria trabajo/errores inutiles). Al
+  // reiniciar _setersParcheados, un nuevo login vuelve a parchear bien.
+  function restaurarSeters() {
+    if (!_setersParcheados) {
+      return;
+    }
+    PCC.guardarClientes = _orig.guardarClientes;
+    PCC.guardarMovimientos = _orig.guardarMovimientos;
+    PCC.guardarConfig = _orig.guardarConfig;
+    PCC.setTheme = _orig.setTheme;
+    _setersParcheados = false;
+  }
+
   /* --------------------------------------------------------
      LECTURA: Firestore -> espejo local -> UI (onSnapshot).
      -------------------------------------------------------- */
@@ -310,6 +397,10 @@ import {
         snap.forEach(function (d) {
           arr.push(d.data());
         });
+        // Alineamos la cache del delta con lo que realmente hay en remoto,
+        // para que el siguiente guardado local calcule el delta correcto
+        // (issue 1) y no borre por diferencia contra un espejo incompleto.
+        _cacheColeccion[COL_CLIENTES] = indexarPorId(arr);
         aplicarRemoto(function () {
           _orig.guardarClientes.call(PCC, arr);
         });
@@ -324,6 +415,7 @@ import {
         snap.forEach(function (d) {
           arr.push(d.data());
         });
+        _cacheColeccion[COL_MOVIMIENTOS] = indexarPorId(arr);
         aplicarRemoto(function () {
           _orig.guardarMovimientos.call(PCC, arr);
         });
@@ -427,11 +519,21 @@ import {
         batch.set(doc(db, DOC_CONFIG_THEME.col, DOC_CONFIG_THEME.id), {
           valor: tema === "oscuro" ? "oscuro" : "claro"
         });
-        return batch.commit();
+        return batch.commit().then(function () {
+          // Dejamos la cache del delta alineada con lo sembrado, para que
+          // el primer guardado local posterior calcule un delta correcto.
+          _cacheColeccion[COL_CLIENTES] = indexarPorId(clientes);
+          _cacheColeccion[COL_MOVIMIENTOS] = indexarPorId(movimientos);
+        });
       })
-      .catch(function () {
+      .catch(function (e) {
         // Si falla la verificacion/siembra, los onSnapshot seguiran
-        // intentando reflejar lo que haya; no rompemos la app.
+        // intentando reflejar lo que haya; no rompemos la app, pero
+        // dejamos senal diagnostica en consola (issue 6).
+        console.warn(
+          "[firebase-sync] No se pudo verificar/sembrar la nube:",
+          e
+        );
       });
   }
 
@@ -439,6 +541,11 @@ import {
      Flujo de autenticacion.
      -------------------------------------------------------- */
   function iniciarSincronizacion() {
+    // onAuthStateChanged puede entregar un usuario mas de una vez sin un
+    // null intermedio (refresh de token, relink). Cancelamos cualquier
+    // suscripcion previa antes de re-suscribir para no acumular listeners
+    // duplicados (issue 2).
+    cancelarSuscripciones();
     parchearSeters();
     // Primero sembramos si la nube esta vacia; luego suscribimos para
     // reflejar siempre la fuente de verdad remota.
@@ -490,8 +597,12 @@ import {
   if ($btnLogout) {
     $btnLogout.addEventListener("click", function () {
       try {
-        signOut(auth).catch(function () {});
-      } catch (e) {}
+        signOut(auth).catch(function (e) {
+          console.warn("[firebase-sync] No se pudo cerrar la sesion:", e);
+        });
+      } catch (e) {
+        console.warn("[firebase-sync] No se pudo cerrar la sesion:", e);
+      }
     });
   }
 
@@ -505,7 +616,20 @@ import {
           ocultarOverlay();
           iniciarSincronizacion();
         } else {
+          // Logout (o aun sin sesion): detener la sincronizacion y dejar
+          // el estado limpio para un posible nuevo login en la misma carga.
           cancelarSuscripciones();
+          // Restaurar los setters originales: sin auth, una escritura local
+          // NO debe intentar ir a Firestore (issue 3). Un nuevo login
+          // volvera a parchear via iniciarSincronizacion().
+          restaurarSeters();
+          // Reiniciar la cache del delta y el flag de siembra para que una
+          // nueva sesion recalcule el estado desde cero (issue 4). Con datos
+          // compartidos esto es inocuo, pero evita arrastrar estado entre
+          // sesiones distintas en la misma pestana.
+          _cacheColeccion[COL_CLIENTES] = null;
+          _cacheColeccion[COL_MOVIMIENTOS] = null;
+          _sembradoVerificado = false;
           habilitarBotonesLogin(true);
           mostrarOverlay();
         }
