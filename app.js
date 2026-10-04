@@ -33,7 +33,16 @@
      ---------------------------------------------------------- */
   var CONFIG_DEFAULT = {
     diasAviso: 3, // dias de antelacion para considerar un pago "proximo"
-    moneda: "MXN"
+    moneda: "MXN",
+    // Gastos fijos del negocio (reparto de fin de mes entre socios).
+    // Starlink: numAntenas * costoAntena = 2 * 1305 = 2610 fijo todos
+    // los meses. Luz: costoLuz cada luzPeriodicidadMeses meses, empezando
+    // en luzMesAncla (noviembre 2025 es el primer mes que paga luz).
+    costoAntena: 1305,
+    numAntenas: 2,
+    costoLuz: 300,
+    luzPeriodicidadMeses: 2,
+    luzMesAncla: "2025-11"
   };
 
   var MONTO_DEFAULT = 500;
@@ -231,6 +240,10 @@
        diaPago:          number   dia del mes en que vence el pago (1-31)
        tipoPago:         string   'PTP' | 'Directo'
        estatus:          string   'Activo' | 'Pausado'
+       socio:            string   'Carlos' | 'Octavio' (a quien le paga el
+                                  cliente; default 'Carlos'. Solo Octavio
+                                  cobra directo algun cliente. Los clientes
+                                  v1 sin este campo migran a 'Carlos')
        fechaProximoPago: string   ISO 'YYYY-MM-DD' (vencimiento vigente)
        ultimoPago:       string   ISO 'YYYY-MM-DD' del ultimo pago, o ''
      }
@@ -262,6 +275,7 @@
       diaPago: diaPago != null ? Number(diaPago) : 1,
       tipoPago: datos.tipoPago === "Directo" ? "Directo" : "PTP",
       estatus: datos.estatus === "Pausado" ? "Pausado" : "Activo",
+      socio: datos.socio === "Octavio" ? "Octavio" : "Carlos",
       fechaProximoPago: datos.fechaProximoPago
         ? fechaISO(datos.fechaProximoPago)
         : "",
@@ -464,6 +478,150 @@
   }
 
   /* ----------------------------------------------------------
+     6.b Reparto de fin de mes entre socios (Carlos / Octavio)
+     ------------------------------------------------------------
+     El negocio es de dos socios: Carlos y Octavio. Al cierre de mes
+     se reparte la ganancia 50/50, pero antes se descuentan los gastos
+     fijos compartidos (Starlink + luz) y se aparta el pago directo de
+     los clientes marcados socio 'Octavio' (ese dinero es 100% suyo).
+
+     Formula (confirmada por el usuario):
+       ingresosMes  = pagos cobrados (esPago) con fecha en el mes
+       pagosOctavio = de esos pagos, los de clientes socio 'Octavio'
+       gastos       = Starlink (2610 fijo) + luz (300 si aplica el mes)
+       gananciaRepartir = ingresosMes - gastos - pagosOctavio
+       mitad        = gananciaRepartir / 2
+       totalCarlos  = mitad
+       totalOctavio = mitad + pagosOctavio
+     ---------------------------------------------------------- */
+
+  /**
+   * luzAplicaEnMes(fecha, cfg): true si el mes de 'fecha' paga luz.
+   * La luz se paga cada 'luzPeriodicidadMeses' meses empezando en
+   * 'luzMesAncla'. Aplica cuando el numero de meses transcurridos desde
+   * el ancla es >= 0 y multiplo de la periodicidad.
+   * Ej.: ancla '2025-11', periodicidad 2 -> nov-2025 true, dic-2025
+   * false, ene-2026 true, feb-2026 false.
+   * @param {Date|string|number} fecha
+   * @param {Object} [cfg]
+   * @returns {boolean}
+   */
+  function luzAplicaEnMes(fecha, cfg) {
+    cfg = cfg || cargarConfig();
+    var d = aFecha(fecha);
+    if (!d) {
+      return false;
+    }
+    var periodo = Number(cfg.luzPeriodicidadMeses);
+    if (!isFinite(periodo) || periodo <= 0) {
+      return false;
+    }
+    var ancla = aFecha(cfg.luzMesAncla + "-01") || aFecha(cfg.luzMesAncla);
+    if (!ancla) {
+      return false;
+    }
+    var offset =
+      (d.getFullYear() - ancla.getFullYear()) * 12 +
+      (d.getMonth() - ancla.getMonth());
+    return offset >= 0 && offset % periodo === 0;
+  }
+
+  /**
+   * gastosFijosDelMes(fecha, cfg): desglose de gastos fijos del mes.
+   * starlink = numAntenas * costoAntena; luz = costoLuz si aplica el mes.
+   * @param {Date|string|number} fecha
+   * @param {Object} [cfg]
+   * @returns {{starlink:number, luz:number, total:number}}
+   */
+  function gastosFijosDelMes(fecha, cfg) {
+    cfg = cfg || cargarConfig();
+    var starlink = Number(cfg.numAntenas) * Number(cfg.costoAntena);
+    if (!isFinite(starlink)) {
+      starlink = 0;
+    }
+    var aplica = luzAplicaEnMes(fecha, cfg);
+    var luz = aplica ? Number(cfg.costoLuz) : 0;
+    if (!isFinite(luz)) {
+      luz = 0;
+    }
+    return { starlink: starlink, luz: luz, total: starlink + luz };
+  }
+
+  /**
+   * calcularReparto(fecha, clientes, movimientos, cfg): calcula el
+   * reparto de fin de mes para el mes de 'fecha'.
+   *
+   * ingresosMes se basa en los PAGOS COBRADOS (movimientos tipo
+   * 'ingreso' con esPago===true) cuya fecha cae en el mismo mes.
+   * Un pago se atribuye a Octavio si su movimiento.clienteId apunta a
+   * un cliente con socio 'Octavio' (si falta clienteId, no cuenta como
+   * de Octavio).
+   *
+   * @param {Date|string|number} fecha
+   * @param {Array<Object>} clientes
+   * @param {Array<Object>} movimientos
+   * @param {Object} [cfg]
+   * @returns {Object}
+   */
+  function calcularReparto(fecha, clientes, movimientos, cfg) {
+    cfg = cfg || cargarConfig();
+    var ref = aFecha(fecha);
+    clientes = Array.isArray(clientes) ? clientes : [];
+    movimientos = Array.isArray(movimientos) ? movimientos : [];
+
+    // Indice de socio por id de cliente.
+    var socioPorId = {};
+    for (var i = 0; i < clientes.length; i++) {
+      var c = clientes[i];
+      if (c && c.id) {
+        socioPorId[c.id] = c.socio === "Octavio" ? "Octavio" : "Carlos";
+      }
+    }
+
+    var ingresosMes = 0;
+    var pagosOctavio = 0;
+    for (var j = 0; j < movimientos.length; j++) {
+      var mov = movimientos[j];
+      if (!mov || mov.tipo !== "ingreso" || !mov.esPago) {
+        continue;
+      }
+      var fMov = aFecha(mov.fecha);
+      if (!fMov || !ref) {
+        continue;
+      }
+      if (
+        fMov.getFullYear() !== ref.getFullYear() ||
+        fMov.getMonth() !== ref.getMonth()
+      ) {
+        continue;
+      }
+      var monto = Number(mov.monto) || 0;
+      ingresosMes += monto;
+      if (mov.clienteId && socioPorId[mov.clienteId] === "Octavio") {
+        pagosOctavio += monto;
+      }
+    }
+
+    var gastos = gastosFijosDelMes(ref, cfg);
+    var gananciaRepartir = ingresosMes - gastos.total - pagosOctavio;
+    var mitad = gananciaRepartir / 2;
+
+    return {
+      ingresosMes: ingresosMes,
+      starlink: gastos.starlink,
+      luz: gastos.luz,
+      gastosFijos: gastos.total,
+      pagosOctavio: pagosOctavio,
+      gananciaRepartir: gananciaRepartir,
+      mitadCarlos: mitad,
+      mitadOctavio: mitad,
+      totalCarlos: mitad,
+      totalOctavio: mitad + pagosOctavio,
+      luzAplica: luzAplicaEnMes(ref, cfg)
+    };
+  }
+
+  /* ----------------------------------------------------------
      7. Capa de persistencia (localStorage) robusta
      ---------------------------------------------------------- */
 
@@ -519,9 +677,22 @@
       return clonar(CONFIG_DEFAULT);
     }
     // Mezclar con los valores por defecto por si faltan claves nuevas.
+    // Esto migra configuraciones viejas {diasAviso,moneda} anadiendo las
+    // claves de gastos fijos con sus defaults.
     return {
       diasAviso: cfg.diasAviso != null ? cfg.diasAviso : CONFIG_DEFAULT.diasAviso,
-      moneda: cfg.moneda != null ? cfg.moneda : CONFIG_DEFAULT.moneda
+      moneda: cfg.moneda != null ? cfg.moneda : CONFIG_DEFAULT.moneda,
+      costoAntena:
+        cfg.costoAntena != null ? cfg.costoAntena : CONFIG_DEFAULT.costoAntena,
+      numAntenas:
+        cfg.numAntenas != null ? cfg.numAntenas : CONFIG_DEFAULT.numAntenas,
+      costoLuz: cfg.costoLuz != null ? cfg.costoLuz : CONFIG_DEFAULT.costoLuz,
+      luzPeriodicidadMeses:
+        cfg.luzPeriodicidadMeses != null
+          ? cfg.luzPeriodicidadMeses
+          : CONFIG_DEFAULT.luzPeriodicidadMeses,
+      luzMesAncla:
+        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla
     };
   }
 
@@ -530,7 +701,18 @@
     var merge = {
       diasAviso:
         cfg.diasAviso != null ? cfg.diasAviso : CONFIG_DEFAULT.diasAviso,
-      moneda: cfg.moneda != null ? cfg.moneda : CONFIG_DEFAULT.moneda
+      moneda: cfg.moneda != null ? cfg.moneda : CONFIG_DEFAULT.moneda,
+      costoAntena:
+        cfg.costoAntena != null ? cfg.costoAntena : CONFIG_DEFAULT.costoAntena,
+      numAntenas:
+        cfg.numAntenas != null ? cfg.numAntenas : CONFIG_DEFAULT.numAntenas,
+      costoLuz: cfg.costoLuz != null ? cfg.costoLuz : CONFIG_DEFAULT.costoLuz,
+      luzPeriodicidadMeses:
+        cfg.luzPeriodicidadMeses != null
+          ? cfg.luzPeriodicidadMeses
+          : CONFIG_DEFAULT.luzPeriodicidadMeses,
+      luzMesAncla:
+        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla
     };
     return _escribir(STORAGE_KEYS.config, merge);
   }
@@ -558,8 +740,11 @@
      ---------------------------------------------------------- */
 
   // Datos crudos: [nombre, celular, megas, instalacionISO, monto, diaPago,
-  //                tipoPago, estatus, ultimoPagoISO]
+  //                tipoPago, estatus, ultimoPagoISO, socio?]
   // ultimoPago '' = aun sin pagar el ciclo (puede quedar vencido).
+  // socio (10a columna, opcional): 'Octavio' marca al UNICO cliente que
+  // le paga directo a Octavio (monto 500). El resto omite la columna y
+  // queda en 'Carlos' por default via crearCliente.
   var SEED_RAW = [
     ["Cresencia caraos casa P4", "9842785595", "5 MB", "2025-11-02", 500, 2, "Directo", "Activo", "2025-11-02"],
     ["VECINA YOLANDA CASA 15", "9841000015", "10 MB", "2026-05-05", 500, 5, "PTP", "Activo", ""],
@@ -578,7 +763,8 @@
     ["Jessy casa 43", "9841000043", "5 MB", "2025-02-24", 500, 24, "Directo", "Activo", ""],
     ["Obed", "9841564118", "10 MB", "2024-07-27", 500, 27, "PTP", "Activo", ""],
     ["VECINO DE BRANDON", "9841000088", "10 MB", "2026-03-28", 500, 28, "Directo", "Activo", ""],
-    ["CASA 17 CARMEN LAVAND", "9841003920", "10 MB", "2026-09-16", 500, 16, "PTP", "Activo", "2026-09-16"],
+    // Unico cliente que le paga directo a Octavio (socio 'Octavio', $500).
+    ["CASA 17 CARMEN LAVAND", "9841003920", "10 MB", "2026-09-16", 500, 16, "PTP", "Activo", "2026-09-16", "Octavio"],
     // Relleno hasta ~24 con mezcla de tipos/estatus:
     ["Fernando casa 8", "9841002008", "15 MB", "2024-06-10", 550, 10, "Directo", "Activo", ""],
     ["Rosa Maria", "9841002009", "10 MB", "2025-01-18", 500, 18, "PTP", "Pausado", ""],
@@ -612,7 +798,8 @@
         diaPago: diaPago,
         tipoPago: fila[6],
         estatus: fila[7],
-        ultimoPago: ultimoPago
+        ultimoPago: ultimoPago,
+        socio: fila[9] // undefined para la mayoria -> 'Carlos' por default
       });
       return cliente;
     });
@@ -756,6 +943,11 @@
     calcularProximoPago: calcularProximoPago,
     diasRestantes: diasRestantes,
     estadoPago: estadoPago,
+
+    // Reparto de fin de mes entre socios
+    luzAplicaEnMes: luzAplicaEnMes,
+    gastosFijosDelMes: gastosFijosDelMes,
+    calcularReparto: calcularReparto,
 
     // Persistencia
     cargarClientes: cargarClientes,
