@@ -1,17 +1,93 @@
 # Panel de Control de Clientes
 
-Aplicación web para administrar los clientes y las finanzas de un negocio de venta de internet / megas. Está hecha con **HTML + CSS + JavaScript puro (vanilla)**: no necesita servidor, ni instalación, ni conexión a internet para funcionar. Todos los datos se guardan localmente en el navegador.
+Aplicación web para administrar los clientes y las finanzas de un negocio de venta de internet / megas. Está hecha con **HTML + CSS + JavaScript puro (vanilla)**: no necesita bundler, ni instalación de dependencias, ni frameworks. Ahora usa **Firebase (Cloud Firestore + Authentication)** para guardar los datos **en la nube** y **sincronizarlos entre tu móvil y tu PC**: puedes abrirla en cualquier dispositivo y ver siempre la misma información.
 
 La interfaz tiene una paleta **minimalista** (acento índigo suave) con **modo claro y modo oscuro**, y toda la aplicación está en **español**.
 
 ## Cómo abrirla
 
-1. Descarga o copia la carpeta del proyecto (debe contener `index.html`, `styles.css` y `app.js` juntos).
-2. Haz **doble clic en `index.html`**. Se abrirá en tu navegador (Chrome, Edge, Firefox, Safari…).
+La app está pensada para abrirse **en cualquier dispositivo (móvil o PC)** con los mismos datos sincronizados. Para ello se publica como sitio estático en **Netlify** y guarda los datos en **Firebase**.
 
-No hace falta nada más: no requiere Node, ni npm, ni un servidor web. Funciona con el protocolo `file://`.
+- **En línea (recomendado):** abre el sitio desplegado en Netlify:
 
-> La primera vez que la abres se cargan automáticamente unos **datos de ejemplo** para que puedas probar todo de inmediato.
+  **https://ornate-melba-f303fc.netlify.app**
+
+  Funciona igual en el navegador del móvil y en el de la PC (Chrome, Edge, Firefox, Safari…).
+
+- **En local para desarrollo:** sírvela con un **servidor http** sencillo y ábrela en `http://localhost`. Por ejemplo, desde la carpeta del proyecto:
+
+  ```
+  python3 -m http.server 8080
+  ```
+
+  y luego abre `http://localhost:8080`.
+
+> **Importante: ya NO funciona con doble clic (`file://`).** Como ahora carga los SDK de Firebase mediante **módulos ES** desde el CDN de gstatic, el navegador los bloquea bajo el protocolo `file://` (por CORS y por las reglas de los módulos). Debes abrirla por **http/https** (Netlify o un servidor local) y **tener conexión a internet**.
+
+> **Inicio de sesión:** al abrir la aplicación aparece una pantalla que pide **iniciar sesión**. Puedes entrar con **Google** o como **invitado** (acceso anónimo). Una vez dentro, en la cabecera tienes el botón **Cerrar sesión**.
+
+> La primera vez (si la nube está vacía) se cargan automáticamente unos **datos de ejemplo** para que puedas probar todo de inmediato (ver [Siembra y migración inicial](#siembra-y-migración-inicial)).
+
+## Sincronización en la nube con Firebase
+
+La aplicación guarda y sincroniza los datos con **Cloud Firestore** del proyecto Firebase `panel-clientes-12a4a`, y controla el acceso con **Firebase Authentication**.
+
+- **Mismos datos en todos lados:** cualquier cambio (alta/edición de cliente, pagos, gastos, configuración, tema) se escribe en Firestore y aparece **en vivo** en los demás dispositivos que tengan la sesión abierta.
+- **Datos COMPARTIDOS entre todos los autenticados:** por ahora, todo el que inicie sesión (con Google o como invitado) ve y edita **los mismos** datos. Esto es **intencional y temporal** para arrancar y probar; **todavía no** se restringe por correo. Más adelante se puede endurecer (ver `firestore.rules`).
+- **Estructura de datos en Firestore** (compartida, no por usuario):
+  - Colección **`clientes`**: un documento por cliente (el `id` del cliente es el id del documento).
+  - Colección **`movimientos`**: un documento por movimiento (gastos, ingresos, ahorros y pagos; el `id` del movimiento es el id del documento).
+  - Documento **`config/app`**: el objeto de configuración (días de aviso, moneda, gastos fijos, etc.).
+  - Documento **`config/theme`**: el tema, con la forma `{ valor: 'claro' | 'oscuro' }`.
+- **SDK:** se usa el SDK modular de Firebase **v10.12.5** cargado por el CDN de gstatic (`firebase-app`, `firebase-auth`, `firebase-firestore`) desde `firebase-sync.js`.
+- **Degradación segura:** si el SDK no carga o falla el inicio de sesión, la app no se rompe; muestra un mensaje en español en la pantalla de inicio de sesión.
+
+### Siembra y migración inicial
+
+La **primera vez** que alguien entra y **Firestore está vacío** (sin clientes ni movimientos), la app **siembra la nube una sola vez**:
+
+- Si ese navegador ya tenía datos en `localStorage` de la versión anterior (solo local), **sube esos** datos a Firestore.
+- Si no hay datos locales, usa los **datos de ejemplo** (`construirSeed`, los ~24 clientes de demostración) más la configuración y el tema por defecto.
+
+Si Firestore **ya tiene datos**, la app **no los duplica ni los sobrescribe**: la nube es la fuente de verdad y simplemente se refleja en cada dispositivo.
+
+## Pasos en Firebase (consola)
+
+Estos pasos se hacen una sola vez en la [consola de Firebase](https://console.firebase.google.com/) sobre el proyecto `panel-clientes-12a4a`:
+
+1. **Authentication → Sign-in method:** habilitar **Google** y **Anónimo** (ya hechos). Son los dos métodos que usa la pantalla de inicio de sesión.
+2. **Authentication → Settings → Authorized domains:** añadir los dominios desde los que se abrirá la app para que el inicio de sesión funcione:
+   - `ornate-melba-f303fc.netlify.app` (el sitio en Netlify)
+   - `localhost` (para pruebas locales con un servidor http)
+3. **Firestore Database:** crear la base de datos si aún no existe. Luego, en la pestaña **Rules**, pegar el contenido del archivo **`firestore.rules`** de este repositorio y pulsar **Publicar**. Esas reglas permiten leer y escribir solo a usuarios autenticados.
+
+> **Sobre las claves:** las claves Web que aparecen en `firebaseConfig` (dentro de `firebase-sync.js`) son **públicas por diseño**; no son secretas. La seguridad real la dan las **reglas de Firestore** más **Authentication**, no el ocultar esas claves.
+
+## Pasos en Netlify
+
+El sitio se publica como estático, **sin build**, tal como define `netlify.toml`:
+
+1. En [Netlify](https://app.netlify.com/) conectar el repositorio de GitHub **`octaredoficial/panel-control-clientes`** (o, como alternativa rápida, **arrastrar la carpeta** del proyecto a Netlify).
+2. Configuración de despliegue:
+   - **Build command:** vacío (ninguno).
+   - **Publish directory:** `.` (la raíz del repositorio), tal como indica `netlify.toml`.
+3. Tras el despliegue, el sitio queda disponible en **https://ornate-melba-f303fc.netlify.app**.
+4. **Recordatorio:** ese dominio (`ornate-melba-f303fc.netlify.app`) debe estar en **Authorized domains** de Firebase (paso anterior) para que el inicio de sesión funcione.
+
+## Verificación manual en el navegador
+
+Como no hay navegador headless en el entorno de pruebas, esta comprobación se hace a mano:
+
+1. Abre el sitio de Netlify (**https://ornate-melba-f303fc.netlify.app**) o sírvelo en local con un servidor http y usa `http://localhost`.
+2. **Inicia sesión con Google** y, en otra prueba, entra también **como invitado** (anónimo). Verifica que la pantalla de inicio de sesión desaparece y aparece la app.
+3. **Sincronización en vivo:** en un dispositivo/navegador logueado, **da de alta o edita un cliente**; en otro dispositivo/navegador (también con sesión iniciada) comprueba que el cambio **aparece solo**, sin recargar.
+4. **Pagar y revertir:** registra un **pago** de un cliente y luego pulsa **↩️ Revertir**; confirma que el Resumen y el Reparto se recalculan y que el cambio se refleja en el otro dispositivo.
+5. **Persistencia desde la nube:** **recarga** la página y confirma que los datos siguen ahí (vienen de Firestore, no solo del navegador).
+6. **Modo oscuro:** alterna el tema con 🌙 / ☀️ y comprueba que se recuerda y se sincroniza.
+7. **Consola del navegador:** debe quedar **sin errores**.
+8. **Cerrar sesión:** pulsa **Cerrar sesión** y verifica que vuelve a aparecer la pantalla de inicio de sesión.
+
+> El botón **Avisar** (WhatsApp) **sigue funcionando igual** que antes: abre un enlace `https://wa.me/...` con el mensaje prellenado.
 
 ## Funcionalidades
 
@@ -124,21 +200,24 @@ Si quieres volver al conjunto de datos de ejemplo original:
 
 Esto reemplaza todos los clientes y movimientos actuales por los datos de ejemplo.
 
-## Persistencia (localStorage)
+## Persistencia (Firestore + espejo local)
 
-Toda la información se guarda en el **almacenamiento local del navegador** (`localStorage`), bajo claves con prefijo `pcc.` (`pcc.clientes`, `pcc.movimientos`, `pcc.config`, `pcc.theme`). La configuración (`pcc.config`) incluye los gastos fijos del negocio (`costoAntena`, `numAntenas`, `costoLuz`, `luzPeriodicidadMeses`, `luzMesAncla`), que se añaden con sus valores por defecto a cualquier configuración antigua que no los tuviera.
+Ahora la **fuente de verdad** es **Cloud Firestore** (en la nube). El **`localStorage`** del navegador actúa como **espejo / caché local** para que la interfaz siga siendo **instantánea**: la pantalla lee de ese espejo de forma síncrona, mientras `firebase-sync.js` mantiene el espejo al día con los datos remotos y propaga a la nube cada cambio que haces.
+
+- En la nube, los datos se guardan en las colecciones **`clientes`** y **`movimientos`** y en los documentos **`config/app`** y **`config/theme`** (ver [Sincronización en la nube con Firebase](#sincronización-en-la-nube-con-firebase)).
+- En el navegador, el espejo local vive bajo claves con prefijo `pcc.` (`pcc.clientes`, `pcc.movimientos`, `pcc.config`, `pcc.theme`). La configuración (`pcc.config`) incluye los gastos fijos del negocio (`costoAntena`, `numAntenas`, `costoLuz`, `luzPeriodicidadMeses`, `luzMesAncla`), que se añaden con sus valores por defecto a cualquier configuración antigua que no los tuviera.
 
 Esto implica que:
 
-- Los datos **permanecen** aunque cierres y vuelvas a abrir la página en el mismo navegador y computadora.
-- Los datos **no se comparten** entre navegadores, dispositivos ni usuarios distintos.
-- Si borras los datos de navegación / el almacenamiento del sitio, se perderá la información (y al volver a abrir se cargarán de nuevo los datos de ejemplo).
+- Los datos **se comparten entre dispositivos y navegadores**: al iniciar sesión ves siempre la misma información y los cambios se sincronizan **en vivo**.
+- Los datos **permanecen** aunque cierres y vuelvas a abrir la página, porque viven en la nube (no dependen de un solo navegador).
+- Si borras el almacenamiento local del sitio, no pierdes nada: al volver a iniciar sesión los datos se **vuelven a traer desde Firestore**.
 
 ## Nota sobre WhatsApp
 
 El botón **Avisar** abre un enlace de WhatsApp (`https://wa.me/...`) con el mensaje prellenado. El número de celular se normaliza a solo dígitos y, si tiene 10 dígitos, se le antepone el código de país de México (**52**).
 
-Esta acción **sí requiere conexión a internet del usuario final** (y tener WhatsApp Web o la app disponible), ya que abre el sitio de WhatsApp en una pestaña nueva. El resto de la aplicación funciona sin internet.
+Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp Web o la app disponible). Como ahora la aplicación sincroniza en la nube con Firebase, **requiere conexión a internet** para funcionar en general.
 
 ## Qué se probó
 

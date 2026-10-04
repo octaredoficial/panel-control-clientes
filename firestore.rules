@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Reglas de seguridad de Cloud Firestore para el Panel de Control de Clientes.
+//
+// POLITICA ACTUAL (temporal, para arrancar y probar):
+// Cualquier usuario AUTENTICADO (incluido el acceso anonimo / invitado)
+// puede leer y escribir todos los documentos. Los datos son COMPARTIDOS
+// por todos los usuarios autenticados (Octavio y su socio Carlos ven lo
+// mismo). Esto es intencional por ahora: todavia NO se restringe por
+// correo ni por lista de usuarios permitidos.
+//
+// NOTA DE SEGURIDAD: las claves Web de firebaseConfig son publicas por
+// diseno; la seguridad real la dan estas reglas junto con Authentication.
+// Con estas reglas, cualquiera que tenga la URL y se autentique (aunque
+// sea como invitado anonimo) accede a los datos.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+
+// ------------------------------------------------------------------
+// COMO ENDURECER MAS ADELANTE (para que SOLO Octavio y Carlos accedan)
+// ------------------------------------------------------------------
+// Cuando se quiera limitar el acceso, reemplazar la condicion de arriba
+// por una de estas opciones (y volver a publicar las reglas):
+//
+// Opcion A - restringir por correo (requiere login con Google, no sirve
+// para el acceso anonimo porque este no tiene email):
+//
+//   match /{document=**} {
+//     allow read, write: if request.auth != null &&
+//       request.auth.token.email in [
+//         'correo-de-octavio@gmail.com',
+//         'correo-de-carlos@gmail.com'
+//       ];
+//   }
+//
+// Opcion B - restringir por lista de UID permitidos (sirve para cualquier
+// metodo de inicio de sesion; copiar los uid desde Authentication > Users):
+//
+//   match /{document=**} {
+//     allow read, write: if request.auth != null &&
+//       request.auth.uid in [
+//         'UID_DE_OCTAVIO',
+//         'UID_DE_CARLOS'
+//       ];
+//   }
+//
+// Al endurecer, conviene tambien deshabilitar el inicio de sesion Anonimo
+// en Firebase (Authentication > Sign-in method) para que solo entren las
+// cuentas permitidas.

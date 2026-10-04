@@ -1,0 +1,20 @@
+# Configuracion de Netlify para el Panel de Control de Clientes.
+#
+# Es un sitio ESTATICO 100% vanilla (HTML + CSS + JavaScript sin bundler
+# ni dependencias npm). NO hay paso de build: Netlify debe publicar la
+# raiz del repositorio tal cual (index.html, styles.css, app.js,
+# firebase-sync.js). Los SDK de Firebase se cargan en el navegador del
+# usuario por el CDN de gstatic (modulos ES), no se empaquetan aqui.
+
+[build]
+  # Directorio que se publica: la raiz del repositorio.
+  publish = "."
+  # Sin comando de build (sitio estatico).
+  command = ""
+
+# Cabeceras basicas para los archivos del sitio.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
