@@ -955,6 +955,79 @@ body {
   border-top: 1px solid var(--borde);
 }
 
+/* ---------------------- Login (overlay) ------------------- */
+/* Overlay de inicio de sesion (Firebase Auth). Centrado, bloqueante y
+   compatible con modo oscuro mediante las variables de la paleta. Se
+   oculta con el atributo [hidden] desde firebase-sync.js al autenticar. */
+.login {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--fondo);
+}
+
+.login[hidden] {
+  display: none;
+}
+
+.login__panel {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-modal);
+  width: 100%;
+  max-width: 420px;
+  padding: 28px 24px;
+  text-align: center;
+}
+
+.login__titulo {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.login__texto {
+  color: var(--texto-suave);
+  font-size: 0.95rem;
+  margin-top: 8px;
+}
+
+.login__acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.login__btn {
+  justify-content: center;
+  width: 100%;
+}
+
+.login__error {
+  color: var(--rojo);
+  background: var(--rojo-suave);
+  border: 1px solid var(--rojo);
+  border-radius: var(--radio-sm);
+  font-size: 0.88rem;
+  padding: 10px 12px;
+  margin-top: 16px;
+}
+
+.login__error[hidden] {
+  display: none;
+}
+
+/* Boton 'Cerrar sesion' del header: coherente con los demas .btn. */
+#btn-logout[hidden] {
+  display: none;
+}
+
 /* ---------------------- Pie ------------------------------- */
 .pie {
   text-align: center;
