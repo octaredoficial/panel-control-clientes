@@ -622,6 +622,116 @@
   }
 
   /* ----------------------------------------------------------
+     6.c Registrar y REVERTIR un pago (logica pura, testeable)
+     ------------------------------------------------------------
+     El boton "Pagar" de la UI puede pulsarse por error. Para poder
+     deshacerlo con exactitud, al registrar el pago guardamos en el
+     propio movimiento el estado PREVIO del cliente (prevUltimoPago y
+     prevFechaProximoPago). Asi, revertir simplemente borra el
+     movimiento y RESTAURA esos valores tal cual, sin recomputar.
+     ---------------------------------------------------------- */
+
+  /**
+   * construirMovimientoPago(cliente, hoy): crea el objeto de movimiento
+   * de un pago cobrado, incluyendo el estado PREVIO del cliente para
+   * poder revertir con exactitud. NO muta al cliente.
+   * @param {Object} cliente
+   * @param {Date|string|number} [hoy]
+   * @returns {Object} movimiento { id, tipo:'ingreso', esPago:true, ... }
+   */
+  function construirMovimientoPago(cliente, hoy) {
+    cliente = cliente || {};
+    var hoyISO = fechaISO(aFecha(hoy) || new Date());
+    return {
+      id: generarId(),
+      tipo: "ingreso",
+      esPago: true,
+      clienteId: cliente.id,
+      concepto: "Pago de " + (cliente.nombre || "cliente"),
+      monto: Number(cliente.monto) || 0,
+      fecha: hoyISO,
+      // Estado previo del cliente (para revertir sin recomputar).
+      prevUltimoPago: cliente.ultimoPago != null ? cliente.ultimoPago : "",
+      prevFechaProximoPago:
+        cliente.fechaProximoPago != null ? cliente.fechaProximoPago : ""
+    };
+  }
+
+  /**
+   * revertirPago(movimientoId, clientes, movimientos): deshace un pago.
+   * Logica pura (no toca localStorage): devuelve nuevas listas de
+   * clientes y movimientos ya actualizadas.
+   *
+   * - Elimina de 'movimientos' el movimiento de pago con ese id.
+   * - Restaura en el cliente ultimoPago/fechaProximoPago a los valores
+   *   prevUltimoPago/prevFechaProximoPago guardados en el movimiento.
+   * - Fallback para pagos antiguos SIN esos campos: limpia ultimoPago y
+   *   recalcula fechaProximoPago con calcularProximoPago.
+   *
+   * @param {string} movimientoId
+   * @param {Array<Object>} clientes
+   * @param {Array<Object>} movimientos
+   * @returns {{clientes:Array, movimientos:Array, revertido:boolean, usoFallback:boolean}}
+   */
+  function revertirPago(movimientoId, clientes, movimientos) {
+    clientes = Array.isArray(clientes) ? clientes : [];
+    movimientos = Array.isArray(movimientos) ? movimientos : [];
+
+    var mov = null;
+    for (var i = 0; i < movimientos.length; i++) {
+      if (movimientos[i] && movimientos[i].id === movimientoId) {
+        mov = movimientos[i];
+        break;
+      }
+    }
+    if (!mov || !mov.esPago) {
+      return {
+        clientes: clientes,
+        movimientos: movimientos,
+        revertido: false,
+        usoFallback: false
+      };
+    }
+
+    var nuevosMovs = movimientos.filter(function (m) {
+      return m.id !== movimientoId;
+    });
+
+    var usoFallback = false;
+    var tienePrev =
+      Object.prototype.hasOwnProperty.call(mov, "prevUltimoPago") ||
+      Object.prototype.hasOwnProperty.call(mov, "prevFechaProximoPago");
+
+    for (var j = 0; j < clientes.length; j++) {
+      var c = clientes[j];
+      if (!c || c.id !== mov.clienteId) {
+        continue;
+      }
+      if (tienePrev) {
+        c.ultimoPago = mov.prevUltimoPago != null ? mov.prevUltimoPago : "";
+        c.fechaProximoPago =
+          mov.prevFechaProximoPago != null ? mov.prevFechaProximoPago : "";
+        if (!c.fechaProximoPago) {
+          c.fechaProximoPago = fechaISO(calcularProximoPago(c, new Date()));
+        }
+      } else {
+        // Pago antiguo sin datos de reversion: fallback seguro.
+        usoFallback = true;
+        c.ultimoPago = "";
+        c.fechaProximoPago = fechaISO(calcularProximoPago(c, new Date()));
+      }
+      break;
+    }
+
+    return {
+      clientes: clientes,
+      movimientos: nuevosMovs,
+      revertido: true,
+      usoFallback: usoFallback
+    };
+  }
+
+  /* ----------------------------------------------------------
      7. Capa de persistencia (localStorage) robusta
      ---------------------------------------------------------- */
 
@@ -948,6 +1058,10 @@
     luzAplicaEnMes: luzAplicaEnMes,
     gastosFijosDelMes: gastosFijosDelMes,
     calcularReparto: calcularReparto,
+
+    // Registrar / revertir pagos
+    construirMovimientoPago: construirMovimientoPago,
+    revertirPago: revertirPago,
 
     // Persistencia
     cargarClientes: cargarClientes,
@@ -1526,6 +1640,14 @@
       }
     }
 
+    // Boton "Revertir pago": solo visible si el cliente tiene algun pago
+    // registrado que se pueda deshacer (p.ej. pulsado por error).
+    var btnRevertir = $(".accion-revertir", art);
+    if (btnRevertir) {
+      var tienePago = !!ultimoPagoDeCliente(cliente.id);
+      btnRevertir.hidden = !tienePago;
+    }
+
     return frag;
   }
 
@@ -1623,23 +1745,87 @@
     var c = lista[idx];
     var hoyISO = PCC.fechaISO(new Date());
 
-    // Registrar el movimiento de ingreso (pago).
+    // Registrar el movimiento de ingreso (pago). El movimiento guarda el
+    // estado PREVIO del cliente (prevUltimoPago/prevFechaProximoPago) para
+    // poder revertir el pago con exactitud si se pulso por error.
     var movs = movimientos();
-    movs.push({
-      id: PCC.generarId(),
-      tipo: "ingreso",
-      esPago: true,
-      clienteId: c.id,
-      concepto: "Pago de " + (c.nombre || "cliente"),
-      monto: Number(c.monto) || 0,
-      fecha: hoyISO
-    });
+    movs.push(PCC.construirMovimientoPago(c, hoyISO));
     PCC.guardarMovimientos(movs);
 
     // Actualizar ultimoPago y recalcular proximo ciclo.
     c.ultimoPago = hoyISO;
     c.fechaProximoPago = PCC.fechaISO(PCC.calcularProximoPago(c, new Date()));
     PCC.guardarClientes(lista);
+
+    render();
+  }
+
+  /**
+   * ultimoPagoDeCliente(id): devuelve el movimiento de pago (esPago) mas
+   * reciente de un cliente, o null si no tiene ninguno. "Mas reciente" se
+   * decide por fecha; a igual fecha, por orden de registro (el ultimo).
+   */
+  function ultimoPagoDeCliente(id) {
+    var movs = movimientos();
+    var elegido = null;
+    for (var i = 0; i < movs.length; i++) {
+      var m = movs[i];
+      if (!m || !m.esPago || m.clienteId !== id) {
+        continue;
+      }
+      if (!elegido) {
+        elegido = m;
+        continue;
+      }
+      var fa = PCC.aFecha(m.fecha);
+      var fb = PCC.aFecha(elegido.fecha);
+      // Fecha mas reciente gana; a igualdad, el de registro posterior.
+      if (fa && fb ? fa.getTime() >= fb.getTime() : true) {
+        elegido = m;
+      }
+    }
+    return elegido;
+  }
+
+  /**
+   * accionRevertir(cliente): deshace el ultimo pago registrado del cliente.
+   * Pide confirmacion, borra el movimiento de pago y restaura al cliente al
+   * estado previo (ultimoPago/fechaProximoPago). El reparto y las metricas
+   * del mes se recalculan solos al re-renderizar.
+   */
+  function accionRevertir(cliente) {
+    var mov = ultimoPagoDeCliente(cliente.id);
+    if (!mov) {
+      window.alert(
+        'No hay ningún pago registrado para "' +
+          (cliente.nombre || "") +
+          '" que se pueda revertir.'
+      );
+      return;
+    }
+    var ok = window.confirm(
+      '¿Revertir el último pago de "' +
+        (cliente.nombre || "") +
+        '"? El cliente volverá a quedar como estaba antes del pago.'
+    );
+    if (!ok) {
+      return;
+    }
+
+    var resultado = PCC.revertirPago(mov.id, clientes(), movimientos());
+    if (!resultado.revertido) {
+      return;
+    }
+    PCC.guardarMovimientos(resultado.movimientos);
+    PCC.guardarClientes(resultado.clientes);
+
+    if (resultado.usoFallback) {
+      window.alert(
+        "El pago se revirtió, pero era un pago antiguo sin datos de " +
+          "reversión. Se recalculó la fecha de próximo pago; conviene " +
+          "revisarla por si no coincide con la que tenía antes."
+      );
+    }
 
     render();
   }
@@ -2113,6 +2299,8 @@
           accionAvisar(cliente);
         } else if (boton.classList.contains("accion-pagar")) {
           accionPagar(cliente);
+        } else if (boton.classList.contains("accion-revertir")) {
+          accionRevertir(cliente);
         } else if (boton.classList.contains("accion-editar")) {
           abrirModalCliente(cliente);
         } else if (boton.classList.contains("accion-pausar")) {

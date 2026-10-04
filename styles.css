@@ -253,6 +253,16 @@ body {
   color: #fff;
 }
 
+.btn--revertir {
+  background: var(--ambar-suave);
+  color: var(--ambar);
+}
+
+.btn--revertir:hover {
+  background: var(--ambar);
+  color: #fff;
+}
+
 .btn--peligro {
   color: var(--rojo);
 }
