@@ -2358,6 +2358,18 @@
     sincronizarChips();
     sincronizarPestanas();
     engancharListeners();
+
+    // Hook aditivo para la capa de sincronizacion (FEAT-002: firebase-sync.js).
+    // Expone las funciones de UI para que, al llegar datos remotos de Firestore,
+    // se pueda disparar un re-render sin tocar el nucleo window.PCC ni su logica.
+    // Solo se asigna en entorno con document (navegador); el arnes no lo crea.
+    window.PCC.UI = {
+      render: render,
+      aplicarTema: aplicarTema,
+      sincronizarChips: sincronizarChips,
+      sincronizarPestanas: sincronizarPestanas
+    };
+
     render();
   }
 
