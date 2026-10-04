@@ -1119,6 +1119,7 @@
     var cfg = PCC.cargarConfig();
 
     renderResumen(lista, movs);
+    renderReparto(lista, movs, cfg);
     renderEstadisticas(lista, movs);
     renderPagos(lista);
     renderClientes(lista);
@@ -1180,6 +1181,34 @@
     setTexto("#metrica-egresos", PCC.formatoMoneda(egresos));
     setTexto("#metrica-ganancia", PCC.formatoMoneda(ganancia));
     setTexto("#metrica-porcobrar", PCC.formatoMoneda(porCobrar));
+  }
+
+  /* ---------------------- Reparto de fin de mes ------------- */
+  function renderReparto(lista, movs, cfg) {
+    var mes = estado.mesSeleccionado;
+    var elMes = $("#reparto-mes");
+    if (elMes) {
+      elMes.textContent = nombreMesAnio(mes);
+    }
+
+    // El nucleo (PCC.calcularReparto) hace todo el calculo de negocio
+    // sobre el primer dia del mes seleccionado. La UI solo formatea.
+    var r = PCC.calcularReparto(inicioDeMes(mes), lista, movs, cfg);
+
+    setTexto("#reparto-ingresos", PCC.formatoMoneda(r.ingresosMes));
+    setTexto("#reparto-starlink", PCC.formatoMoneda(r.starlink));
+    setTexto("#reparto-luz", PCC.formatoMoneda(r.luz));
+    setTexto("#reparto-pagos-octavio", PCC.formatoMoneda(r.pagosOctavio));
+    setTexto("#reparto-ganancia", PCC.formatoMoneda(r.gananciaRepartir));
+    setTexto("#reparto-mitad", PCC.formatoMoneda(r.mitadCarlos));
+    setTexto("#reparto-total-carlos", PCC.formatoMoneda(r.totalCarlos));
+    setTexto("#reparto-total-octavio", PCC.formatoMoneda(r.totalOctavio));
+
+    var nota = $("#reparto-luz-nota");
+    if (nota) {
+      nota.textContent = r.luzAplica ? "Aplica este mes" : "No aplica este mes";
+      nota.classList.toggle("reparto__nota--aplica", !!r.luzAplica);
+    }
   }
 
   /* ---------------------- Estadisticas ---------------------- */
@@ -1476,6 +1505,12 @@
       cliente.fechaProximoPago
     );
     $(".etiqueta-tipo", art).textContent = cliente.tipoPago || "";
+    var socioEl = $(".etiqueta-socio", art);
+    if (socioEl) {
+      var socio = cliente.socio === "Octavio" ? "Octavio" : "Carlos";
+      socioEl.textContent = "Paga a: " + socio;
+      socioEl.classList.toggle("etiqueta-socio--octavio", socio === "Octavio");
+    }
 
     // Texto del boton pausar/reanudar segun estatus.
     var btnPausar = $(".accion-pausar", art);
@@ -1594,6 +1629,7 @@
       id: PCC.generarId(),
       tipo: "ingreso",
       esPago: true,
+      clienteId: c.id,
       concepto: "Pago de " + (c.nombre || "cliente"),
       monto: Number(c.monto) || 0,
       fecha: hoyISO
@@ -1658,6 +1694,7 @@
       setValor("#cliente-dia-pago", cliente.diaPago);
       setValor("#cliente-tipo-pago", cliente.tipoPago);
       setValor("#cliente-estatus", cliente.estatus);
+      setValor("#cliente-socio", cliente.socio === "Octavio" ? "Octavio" : "Carlos");
     } else {
       if (titulo) {
         titulo.textContent = "Nuevo Cliente";
@@ -1665,6 +1702,7 @@
       setValor("#cliente-monto", PCC.MONTO_DEFAULT);
       setValor("#cliente-tipo-pago", "PTP");
       setValor("#cliente-estatus", "Activo");
+      setValor("#cliente-socio", "Carlos");
     }
     abrirModal("#modal-cliente");
   }
@@ -1708,7 +1746,8 @@
       fechaInstalacion: valor("#cliente-fecha-instalacion") || "",
       diaPago: diaPago,
       tipoPago: valor("#cliente-tipo-pago"),
-      estatus: valor("#cliente-estatus")
+      estatus: valor("#cliente-estatus"),
+      socio: valor("#cliente-socio")
     };
 
     var lista = clientes();
@@ -1801,6 +1840,11 @@
     var cfg = PCC.cargarConfig();
     setValor("#config-dias-aviso", cfg.diasAviso);
     setValor("#config-moneda", cfg.moneda);
+    setValor("#config-costo-antena", cfg.costoAntena);
+    setValor("#config-num-antenas", cfg.numAntenas);
+    setValor("#config-costo-luz", cfg.costoLuz);
+    setValor("#config-luz-periodicidad", cfg.luzPeriodicidadMeses);
+    setValor("#config-luz-ancla", cfg.luzMesAncla);
     abrirModal("#modal-config");
   }
 
@@ -1812,9 +1856,43 @@
       window.alert("Los días de aviso deben estar entre 0 y 30.");
       return;
     }
+
+    // Gastos fijos del negocio (reparto de fin de mes).
+    var costoAntena = Number(valor("#config-costo-antena"));
+    var numAntenas = Number(valor("#config-num-antenas"));
+    var costoLuz = Number(valor("#config-costo-luz"));
+    var luzPeriodicidad = Number(valor("#config-luz-periodicidad"));
+    var luzMesAncla = valor("#config-luz-ancla");
+
+    var errores = [];
+    if (isNaN(costoAntena) || costoAntena < 0) {
+      errores.push("El costo por antena debe ser un número válido.");
+    }
+    if (isNaN(numAntenas) || numAntenas < 0) {
+      errores.push("El número de antenas debe ser un número válido.");
+    }
+    if (isNaN(costoLuz) || costoLuz < 0) {
+      errores.push("El costo de luz debe ser un número válido.");
+    }
+    if (isNaN(luzPeriodicidad) || luzPeriodicidad < 1) {
+      errores.push("La periodicidad de luz debe ser 1 o más meses.");
+    }
+    if (!/^\d{4}-\d{2}$/.test(luzMesAncla || "")) {
+      errores.push("El mes ancla de luz debe tener el formato AAAA-MM.");
+    }
+    if (errores.length) {
+      window.alert(errores.join("\n"));
+      return;
+    }
+
     PCC.guardarConfig({
       diasAviso: dias,
-      moneda: valor("#config-moneda") || "MXN"
+      moneda: valor("#config-moneda") || "MXN",
+      costoAntena: costoAntena,
+      numAntenas: numAntenas,
+      costoLuz: costoLuz,
+      luzPeriodicidadMeses: luzPeriodicidad,
+      luzMesAncla: luzMesAncla
     });
     cerrarModales();
     render();

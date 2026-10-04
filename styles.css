@@ -362,6 +362,134 @@ body {
 .metrica--egreso .metrica__valor { color: var(--rojo); }
 .metrica--ganancia .metrica__valor { color: var(--acento); }
 
+/* ---------------------- Reparto de fin de mes ------------- */
+.reparto__desglose {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 18px;
+}
+
+.reparto__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px dashed var(--borde);
+}
+
+.reparto__etiqueta {
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+}
+
+.reparto__valor {
+  font-weight: 700;
+  font-size: 0.98rem;
+  white-space: nowrap;
+}
+
+.reparto__valor--resta { color: var(--rojo); }
+
+.reparto__item--total {
+  border-bottom: none;
+  border-top: 2px solid var(--borde-fuerte);
+  margin-top: 4px;
+  padding-top: 14px;
+}
+
+.reparto__item--total .reparto__etiqueta {
+  color: var(--texto);
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+
+.reparto__item--total .reparto__valor {
+  color: var(--acento);
+  font-size: 1.15rem;
+}
+
+.reparto__nota {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radio-chip);
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.reparto__nota--aplica {
+  background: var(--ambar-suave);
+  color: var(--ambar);
+}
+
+.reparto__totales {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.reparto__socio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border-radius: var(--radio-sm);
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+}
+
+.reparto__socio--carlos { border-left: 3px solid var(--acento); }
+.reparto__socio--octavio { border-left: 3px solid var(--verde); }
+
+.reparto__socio-etiqueta {
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+  font-weight: 600;
+}
+
+.reparto__socio-valor {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.reparto__socio--carlos .reparto__socio-valor { color: var(--acento); }
+.reparto__socio--octavio .reparto__socio-valor { color: var(--verde); }
+
+.reparto__socio-nota {
+  font-size: 0.76rem;
+  color: var(--texto-suave);
+}
+
+/* Etiqueta discreta del socio en la tarjeta de cliente */
+.etiqueta-socio {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: var(--radio-chip);
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.etiqueta-socio--octavio {
+  background: var(--verde-suave);
+  color: var(--verde);
+}
+
+/* Subtitulo de grupo dentro del modal de configuracion */
+.config-subtitulo {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--texto);
+  margin-top: 6px;
+}
+
 /* ---------------------- Estadisticas ---------------------- */
 .stats__grid {
   display: grid;
@@ -852,7 +980,8 @@ body {
 
   .metricas,
   .stats__grid,
-  .stats-mes__lista {
+  .stats-mes__lista,
+  .reparto__totales {
     grid-template-columns: 1fr;
   }
 

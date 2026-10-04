@@ -98,6 +98,58 @@
         </div>
       </section>
 
+      <!-- ================= REPARTO DE FIN DE MES ================= -->
+      <section class="panel panel--reparto" aria-labelledby="reparto-titulo">
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo" id="reparto-titulo">Reparto de fin de mes
+            <span class="panel__titulo-sufijo">( <span id="reparto-mes">Mes de Año</span> )</span>
+          </h2>
+          <span class="panel__nota" title="Los ingresos del reparto se basan en los pagos cobrados de clientes (botón Pagar) con fecha en el mes seleccionado, no en los ingresos manuales.">según pagos cobrados</span>
+        </div>
+
+        <ul class="reparto__desglose">
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">Ingresos del mes (pagos cobrados)</span>
+            <span class="reparto__valor" id="reparto-ingresos">$0.00</span>
+          </li>
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">− Starlink (antenas)</span>
+            <span class="reparto__valor reparto__valor--resta" id="reparto-starlink">$0.00</span>
+          </li>
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">− Luz
+              <span class="reparto__nota" id="reparto-luz-nota">No aplica este mes</span>
+            </span>
+            <span class="reparto__valor reparto__valor--resta" id="reparto-luz">$0.00</span>
+          </li>
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">− Pagos directos a Octavio</span>
+            <span class="reparto__valor reparto__valor--resta" id="reparto-pagos-octavio">$0.00</span>
+          </li>
+          <li class="reparto__item reparto__item--total">
+            <span class="reparto__etiqueta">Ganancia a repartir</span>
+            <span class="reparto__valor" id="reparto-ganancia">$0.00</span>
+          </li>
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">Mitad por socio</span>
+            <span class="reparto__valor" id="reparto-mitad">$0.00</span>
+          </li>
+        </ul>
+
+        <div class="reparto__totales">
+          <article class="reparto__socio reparto__socio--carlos">
+            <span class="reparto__socio-etiqueta">Total Carlos</span>
+            <span class="reparto__socio-valor" id="reparto-total-carlos">$0.00</span>
+            <span class="reparto__socio-nota">su mitad del reparto</span>
+          </article>
+          <article class="reparto__socio reparto__socio--octavio">
+            <span class="reparto__socio-etiqueta">Total Octavio</span>
+            <span class="reparto__socio-valor" id="reparto-total-octavio">$0.00</span>
+            <span class="reparto__socio-nota">su mitad + sus pagos directos</span>
+          </article>
+        </div>
+      </section>
+
       <!-- ================= ESTADISTICAS ================= -->
       <section class="panel panel--stats" aria-labelledby="stats-titulo">
         <div class="panel__cabecera">
@@ -276,6 +328,7 @@
         <span class="tarjeta__monto"></span>
         <span class="tarjeta__vence">Vence: <span class="tarjeta__fecha"></span></span>
         <span class="etiqueta-tipo"></span>
+        <span class="etiqueta-socio"></span>
       </div>
       <div class="tarjeta__acciones">
         <button type="button" class="btn btn--chip accion-avisar">
@@ -366,6 +419,15 @@
               <option value="Pausado">Pausado</option>
             </select>
           </div>
+        </div>
+
+        <div class="campo-grupo">
+          <label class="campo-label" for="cliente-socio">Pagado a</label>
+          <select id="cliente-socio" name="socio" class="campo campo--select">
+            <option value="Carlos">Carlos</option>
+            <option value="Octavio">Octavio</option>
+          </select>
+          <p class="campo-ayuda">Socio que cobra directamente a este cliente. Por defecto Carlos.</p>
         </div>
 
         <div class="modal__acciones">
@@ -489,6 +551,36 @@
             <option value="USD">Dólar (USD)</option>
           </select>
         </div>
+
+        <div class="campo-grupo">
+          <h3 class="config-subtitulo">Gastos fijos del negocio</h3>
+          <p class="campo-ayuda">Se descuentan del total antes de repartir la ganancia entre los socios.</p>
+        </div>
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="config-costo-antena">Costo por antena Starlink</label>
+            <input type="number" id="config-costo-antena" name="costoAntena" class="campo" min="0" step="1" value="1305" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="config-num-antenas">Número de antenas</label>
+            <input type="number" id="config-num-antenas" name="numAntenas" class="campo" min="0" step="1" value="2" />
+          </div>
+        </div>
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="config-costo-luz">Costo de luz</label>
+            <input type="number" id="config-costo-luz" name="costoLuz" class="campo" min="0" step="1" value="300" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="config-luz-periodicidad">Periodicidad de luz (meses)</label>
+            <input type="number" id="config-luz-periodicidad" name="luzPeriodicidadMeses" class="campo" min="1" step="1" value="2" />
+          </div>
+        </div>
+        <div class="campo-grupo">
+          <label class="campo-label" for="config-luz-ancla">Mes ancla de luz (primer mes que paga)</label>
+          <input type="month" id="config-luz-ancla" name="luzMesAncla" class="campo" value="2025-11" />
+        </div>
+
         <div class="campo-grupo">
           <button type="button" id="btn-reiniciar-datos" class="btn btn--peligro-plano">
             <span class="btn__icono" aria-hidden="true">♻️</span>
