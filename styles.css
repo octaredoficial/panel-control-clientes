@@ -307,6 +307,23 @@ body {
   font-weight: 500;
 }
 
+/* Nota aclaratoria "a la fecha de hoy" en Estadisticas y Pagos.
+   Deja claro que el estado de pago se mide contra hoy, no contra el
+   mes seleccionado en el resumen (hallazgo de revision #3). */
+.panel__nota {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radio-chip);
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+  cursor: help;
+}
+
 /* ---------------------- Resumen del mes ------------------- */
 .resumen__nav {
   display: flex;
@@ -474,6 +491,13 @@ body {
 .estado-pagado {
   background: var(--verde-suave);
   color: var(--verde);
+  border-color: transparent;
+}
+
+/* Estado neutro: al corriente, sin urgencia (fuera de la ventana de aviso) */
+.estado-ok {
+  background: var(--superficie-2);
+  color: var(--texto-suave);
   border-color: transparent;
 }
 

@@ -102,6 +102,7 @@
       <section class="panel panel--stats" aria-labelledby="stats-titulo">
         <div class="panel__cabecera">
           <h2 class="panel__titulo" id="stats-titulo">Estadísticas</h2>
+          <span class="panel__nota" title="El estado de pago de los clientes se mide siempre contra la fecha de hoy, aunque navegues de mes.">a la fecha de hoy</span>
         </div>
 
         <div class="stats__grid">
@@ -152,7 +153,9 @@
       <section class="panel panel--pagos" aria-labelledby="pagos-titulo">
         <div class="panel__cabecera panel__cabecera--pagos">
           <div>
-            <h2 class="panel__titulo" id="pagos-titulo">Pagos Próximos o Vencidos</h2>
+            <h2 class="panel__titulo" id="pagos-titulo">Pagos Próximos o Vencidos
+              <span class="panel__nota" title="Vencidos y próximos se calculan contra la fecha de hoy, no según el mes seleccionado arriba.">a la fecha de hoy</span>
+            </h2>
             <p class="pagos__resumen">
               <span id="pagos-resumen-num">0</span> vencidos
               <span class="pagos__sep" aria-hidden="true">·</span>

@@ -424,8 +424,8 @@
         clase: "vencido",
         texto:
           vencidoN === 1
-            ? "Vencido hace 1 dia"
-            : "Vencido hace " + vencidoN + " dias",
+            ? "Vencido hace 1 día"
+            : "Vencido hace " + vencidoN + " días",
         diasVencido: vencidoN
       };
     }
@@ -435,13 +435,13 @@
     }
 
     if (dias === 1) {
-      return { clase: "proximo", texto: "Vence manana", diasVencido: 0 };
+      return { clase: "proximo", texto: "Vence mañana", diasVencido: 0 };
     }
 
     if (dias <= diasAviso) {
       return {
         clase: "proximo",
-        texto: "Vence en " + dias + " dias",
+        texto: "Vence en " + dias + " días",
         diasVencido: 0
       };
     }
@@ -451,14 +451,14 @@
     if (cliente && cliente.ultimoPago) {
       return {
         clase: "pagado",
-        texto: "Pagado - vence en " + dias + " dias",
+        texto: "Pagado · vence en " + dias + " días",
         diasVencido: 0
       };
     }
 
     return {
       clase: "ok",
-      texto: "Vence en " + dias + " dias",
+      texto: "Vence en " + dias + " días",
       diasVencido: 0
     };
   }
@@ -888,6 +888,22 @@
   }
 
   /* ----------------------------------------------------------
+     Criterio UNICO de "vencido" (hallazgo de revision #1)
+     ------------------------------------------------------------
+     Un cliente SOLO cuenta como vencido si esta Activo y su fecha de
+     vencimiento ya paso. Un cliente Pausado NUNCA es "vencido": no se
+     le cobra mientras esta en pausa. Esta funcion se usa en TODOS los
+     conteos (chip "Vencidos", estadistica de vencidos y panel de Pagos)
+     para que los numeros sean coherentes entre si.
+     ---------------------------------------------------------- */
+  function esVencido(cliente) {
+    if (!cliente || cliente.estatus !== "Activo") {
+      return false;
+    }
+    return PCC.estadoPago(cliente, HOY).clase === "vencido";
+  }
+
+  /* ----------------------------------------------------------
      Normalizacion de celular para WhatsApp (MX)
      ---------------------------------------------------------- */
   function normalizarCelular(celular) {
@@ -995,8 +1011,8 @@
       } else if (c.tipoPago === "Directo") {
         directo += 1;
       }
-      var est = PCC.estadoPago(c, HOY);
-      if (est.clase === "vencido") {
+      // Criterio unico: un Pausado nunca cuenta como vencido (ver esVencido).
+      if (esVencido(c)) {
         vencidos += 1;
       } else {
         corriente += 1;
@@ -1010,6 +1026,11 @@
       if (!f || !mismoMes(f, mes)) {
         return;
       }
+      // "Pagos cobrados este mes" cuenta SOLO los ingresos marcados con
+      // esPago=true, es decir, los cobros registrados con el boton "Pagar"
+      // de una tarjeta de cliente. Es intencional: un ingreso manual
+      // (modal "Nuevo Ingreso") no representa el cobro de una mensualidad,
+      // asi que no incrementa este contador (aunque si suma a "Ingresos").
       if (m.tipo === "ingreso" && m.esPago) {
         cobrados += 1;
       }
@@ -1037,6 +1058,8 @@
     }
 
     // Solo clientes vencidos o proximos (dentro de la ventana de aviso).
+    // Los Pausados quedan fuera: mismo criterio que esVencido() usa en los
+    // conteos de chips y estadisticas, para que todo sea coherente.
     var pendientes = lista.filter(function (c) {
       if (c.estatus !== "Activo") {
         return false;
@@ -1054,8 +1077,7 @@
     var numVencidos = 0;
     var montoVencidos = 0;
     pendientes.forEach(function (c) {
-      var est = PCC.estadoPago(c, HOY);
-      if (est.clase === "vencido") {
+      if (esVencido(c)) {
         numVencidos += 1;
         montoVencidos += Number(c.monto) || 0;
       }
@@ -1102,7 +1124,7 @@
       } else if (c.tipoPago === "Directo") {
         conteos.directo += 1;
       }
-      if (PCC.estadoPago(c, HOY).clase === "vencido") {
+      if (esVencido(c)) {
         conteos.vencidos += 1;
       }
     });
@@ -1121,7 +1143,7 @@
         case "pausados":
           return c.estatus === "Pausado";
         case "vencidos":
-          return PCC.estadoPago(c, HOY).clase === "vencido";
+          return esVencido(c);
         case "ptp":
           return c.tipoPago === "PTP";
         case "directo":
