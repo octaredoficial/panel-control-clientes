@@ -42,7 +42,18 @@
     numAntenas: 2,
     costoLuz: 300,
     luzPeriodicidadMeses: 2,
-    luzMesAncla: "2025-11"
+    luzMesAncla: "2025-11",
+    // Datos del negocio para los recibos (valores GENERICOS por defecto;
+    // el dueno los personaliza desde Configuracion). Se usan al armar el
+    // recibo de un pago: encabezado, pie y datos de contacto.
+    //   nombreNegocio:    nombre comercial que aparece en el recibo
+    //   telefonoContacto: telefono de contacto del negocio (texto libre)
+    //   direccionNegocio: domicilio/referencia del negocio
+    //   mensajePie:       linea de agradecimiento al pie del recibo
+    nombreNegocio: "Mi WISP",
+    telefonoContacto: "",
+    direccionNegocio: "",
+    mensajePie: "Gracias por su preferencia."
   };
 
   var MONTO_DEFAULT = 500;
@@ -632,29 +643,230 @@
      ---------------------------------------------------------- */
 
   /**
-   * construirMovimientoPago(cliente, hoy): crea el objeto de movimiento
-   * de un pago cobrado, incluyendo el estado PREVIO del cliente para
-   * poder revertir con exactitud. NO muta al cliente.
+   * periodoPorDefecto(cliente, hoy) -> 'YYYY-MM'
+   * Devuelve el periodo (mes) que cubre un pago. Usa el mes de
+   * cliente.fechaProximoPago si existe; si no, el mes de 'hoy' (o la
+   * fecha actual). Es puro y determinista: no muta nada.
    * @param {Object} cliente
    * @param {Date|string|number} [hoy]
+   * @returns {string} 'YYYY-MM'
+   */
+  function periodoPorDefecto(cliente, hoy) {
+    cliente = cliente || {};
+    var ref =
+      aFecha(cliente.fechaProximoPago) || aFecha(hoy) || new Date();
+    var mes = String(ref.getMonth() + 1).padStart(2, "0");
+    return ref.getFullYear() + "-" + mes;
+  }
+
+  var _formatoPeriodoIntl = new Intl.DateTimeFormat("es-MX", {
+    month: "long",
+    year: "numeric"
+  });
+
+  /**
+   * formatoPeriodo('YYYY-MM') -> 'febrero 2026'
+   * Convierte un periodo 'YYYY-MM' a texto en espanol (Intl es-MX) sobre
+   * el dia 1 del mes. Tolera entradas vacias/invalidas devolviendo ''.
+   * @param {string} periodoYYYYMM
+   * @returns {string}
+   */
+  function formatoPeriodo(periodoYYYYMM) {
+    if (typeof periodoYYYYMM !== "string") {
+      return "";
+    }
+    var m = /^(\d{4})-(\d{2})$/.exec(periodoYYYYMM.trim());
+    if (!m) {
+      return "";
+    }
+    var anio = Number(m[1]);
+    var mesIndex = Number(m[2]) - 1;
+    if (mesIndex < 0 || mesIndex > 11) {
+      return "";
+    }
+    // Algunas plataformas (ICU) devuelven 'febrero de 2026'; normalizamos
+    // a 'febrero 2026' quitando el conector ' de ' intermedio.
+    var texto = _formatoPeriodoIntl.format(new Date(anio, mesIndex, 1));
+    return texto.replace(/\sde\s(\d{4})$/, " $1");
+  }
+
+  /**
+   * generarFolio(anio, movimientos) -> 'REC-AAAA-NNNN'
+   * Calcula el folio CONSECUTIVO del anio en formato 'REC-AAAA-NNNN'
+   * (NNNN con padStart a 4 digitos). Recorre los movimientos esPago que
+   * ya tengan folio del MISMO anio, extrae el consecutivo maximo y
+   * devuelve max+1 formateado. Si no hay ninguno, empieza en 0001.
+   *
+   * Estrategia: el consecutivo se calcula al registrar el pago como
+   * (max folio existente del mismo anio) + 1.
+   * Limitacion: posible colision teorica si dos dispositivos registran
+   * un pago en el mismo instante antes de sincronizar; aceptable para
+   * este negocio (volumen bajo, se corrige editando el folio).
+   * @param {number|string} anio
+   * @param {Array<Object>} movimientos
+   * @returns {string}
+   */
+  function generarFolio(anio, movimientos) {
+    var anioNum = Number(anio);
+    if (!isFinite(anioNum)) {
+      anioNum = new Date().getFullYear();
+    }
+    var anioStr = String(anioNum);
+    movimientos = Array.isArray(movimientos) ? movimientos : [];
+    var max = 0;
+    var re = /^REC-(\d{4})-(\d{4,})$/;
+    for (var i = 0; i < movimientos.length; i++) {
+      var m = movimientos[i];
+      if (!m || !m.esPago || typeof m.folio !== "string") {
+        continue;
+      }
+      var exec = re.exec(m.folio.trim());
+      if (!exec || exec[1] !== anioStr) {
+        continue;
+      }
+      var consecutivo = Number(exec[2]);
+      if (isFinite(consecutivo) && consecutivo > max) {
+        max = consecutivo;
+      }
+    }
+    return "REC-" + anioStr + "-" + String(max + 1).padStart(4, "0");
+  }
+
+  /**
+   * construirMovimientoPago(cliente, hoy, opciones): crea el objeto de
+   * movimiento de un pago cobrado, incluyendo el estado PREVIO del
+   * cliente para poder revertir con exactitud. NO muta al cliente.
+   *
+   * El tercer parametro 'opciones' es OPCIONAL; las llamadas de 2
+   * argumentos siguen funcionando igual. opciones = {
+   *   periodo:     'YYYY-MM' que cubre el pago (default periodoPorDefecto)
+   *   monto:       monto cobrado (default Number(cliente.monto))
+   *   folio:       folio explicito (si no, se calcula con 'movimientos')
+   *   movimientos: lista de movimientos existentes para generar el folio
+   * }
+   * @param {Object} cliente
+   * @param {Date|string|number} [hoy]
+   * @param {Object} [opciones]
    * @returns {Object} movimiento { id, tipo:'ingreso', esPago:true, ... }
    */
-  function construirMovimientoPago(cliente, hoy) {
+  function construirMovimientoPago(cliente, hoy, opciones) {
     cliente = cliente || {};
+    opciones = opciones || {};
     var hoyISO = fechaISO(aFecha(hoy) || new Date());
+
+    // (a) Monto: usar opciones.monto si es un numero valido; si no, el
+    // monto del cliente.
+    var monto;
+    if (opciones.monto != null && isFinite(Number(opciones.monto))) {
+      monto = Number(opciones.monto);
+    } else {
+      monto = Number(cliente.monto) || 0;
+    }
+
+    // (b) Periodo: el indicado o el calculado por defecto.
+    var periodo = opciones.periodo || periodoPorDefecto(cliente, hoy);
+
+    // (c) Folio: el indicado o, si llega la lista de movimientos, uno
+    // consecutivo del anio del pago. Si no se puede calcular, folio ''.
+    var folio = "";
+    if (opciones.folio) {
+      folio = opciones.folio;
+    } else if (Array.isArray(opciones.movimientos)) {
+      var anioPago = (aFecha(hoyISO) || new Date()).getFullYear();
+      folio = generarFolio(anioPago, opciones.movimientos);
+    }
+
     return {
       id: generarId(),
       tipo: "ingreso",
       esPago: true,
       clienteId: cliente.id,
       concepto: "Pago de " + (cliente.nombre || "cliente"),
-      monto: Number(cliente.monto) || 0,
+      monto: monto,
       fecha: hoyISO,
+      periodo: periodo,
+      folio: folio,
       // Estado previo del cliente (para revertir sin recomputar).
       prevUltimoPago: cliente.ultimoPago != null ? cliente.ultimoPago : "",
       prevFechaProximoPago:
         cliente.fechaProximoPago != null ? cliente.fechaProximoPago : ""
     };
+  }
+
+  /**
+   * datosRecibo(cliente, movimientoPago, cfg) -> objeto plano con todo lo
+   * necesario para renderizar un recibo. Aplica fallbacks para pagos
+   * viejos sin folio/periodo. NO depende del DOM.
+   * @param {Object} cliente
+   * @param {Object} movimientoPago
+   * @param {Object} [cfg]
+   * @returns {Object}
+   */
+  function datosRecibo(cliente, movimientoPago, cfg) {
+    cliente = cliente || {};
+    var mov = movimientoPago || {};
+    cfg = cfg || {};
+
+    var fechaEmision = mov.fecha || fechaISO(new Date());
+
+    // Fallback de folio: pagos viejos sin folio -> 'sin folio'.
+    var folio = mov.folio ? mov.folio : "sin folio";
+
+    // Fallback de periodo: si el movimiento no trae periodo, derivarlo del
+    // mes de su fecha.
+    var periodo = mov.periodo;
+    if (!periodo) {
+      periodo = periodoPorDefecto({ fechaProximoPago: fechaEmision }, fechaEmision);
+    }
+
+    var monto = Number(mov.monto) || 0;
+
+    return {
+      negocio: {
+        nombre: cfg.nombreNegocio || CONFIG_DEFAULT.nombreNegocio,
+        telefono: cfg.telefonoContacto || "",
+        direccion: cfg.direccionNegocio || "",
+        pie: cfg.mensajePie || CONFIG_DEFAULT.mensajePie
+      },
+      folio: folio,
+      fechaEmision: fechaEmision,
+      fechaEmisionLarga: formatoFechaLarga(fechaEmision),
+      cliente: {
+        nombre: cliente.nombre || "cliente",
+        celular: cliente.celular || ""
+      },
+      periodo: periodo,
+      periodoTexto: formatoPeriodo(periodo),
+      concepto: mov.concepto || "Pago de " + (cliente.nombre || "cliente"),
+      monto: monto,
+      montoTexto: formatoMoneda(monto),
+      socio: cliente.socio || ""
+    };
+  }
+
+  /**
+   * textoWhatsAppRecibo(datosRecibo) -> string en espanol con el resumen
+   * del recibo para enviar por WhatsApp. Determinista, sin DOM.
+   * @param {Object} datos resultado de datosRecibo(...)
+   * @returns {string}
+   */
+  function textoWhatsAppRecibo(datos) {
+    datos = datos || {};
+    var negocio = datos.negocio || {};
+    var lineas = [];
+    lineas.push("Recibo de pago - " + (negocio.nombre || "Mi WISP"));
+    lineas.push("Folio: " + (datos.folio || "sin folio"));
+    lineas.push("Cliente: " + (datos.cliente && datos.cliente.nombre ? datos.cliente.nombre : "cliente"));
+    if (datos.periodoTexto) {
+      lineas.push("Periodo: " + datos.periodoTexto);
+    }
+    lineas.push("Concepto: " + (datos.concepto || "Pago"));
+    lineas.push("Monto: " + (datos.montoTexto || formatoMoneda(datos.monto)));
+    if (datos.fechaEmisionLarga) {
+      lineas.push("Fecha: " + datos.fechaEmisionLarga);
+    }
+    lineas.push(negocio.pie || CONFIG_DEFAULT.mensajePie);
+    return lineas.join("\n");
   }
 
   /**
@@ -802,7 +1014,22 @@
           ? cfg.luzPeriodicidadMeses
           : CONFIG_DEFAULT.luzPeriodicidadMeses,
       luzMesAncla:
-        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla
+        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla,
+      // Datos del negocio para recibos (migran con default si faltan).
+      nombreNegocio:
+        cfg.nombreNegocio != null
+          ? cfg.nombreNegocio
+          : CONFIG_DEFAULT.nombreNegocio,
+      telefonoContacto:
+        cfg.telefonoContacto != null
+          ? cfg.telefonoContacto
+          : CONFIG_DEFAULT.telefonoContacto,
+      direccionNegocio:
+        cfg.direccionNegocio != null
+          ? cfg.direccionNegocio
+          : CONFIG_DEFAULT.direccionNegocio,
+      mensajePie:
+        cfg.mensajePie != null ? cfg.mensajePie : CONFIG_DEFAULT.mensajePie
     };
   }
 
@@ -822,7 +1049,22 @@
           ? cfg.luzPeriodicidadMeses
           : CONFIG_DEFAULT.luzPeriodicidadMeses,
       luzMesAncla:
-        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla
+        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla,
+      // Datos del negocio para recibos (migran con default si faltan).
+      nombreNegocio:
+        cfg.nombreNegocio != null
+          ? cfg.nombreNegocio
+          : CONFIG_DEFAULT.nombreNegocio,
+      telefonoContacto:
+        cfg.telefonoContacto != null
+          ? cfg.telefonoContacto
+          : CONFIG_DEFAULT.telefonoContacto,
+      direccionNegocio:
+        cfg.direccionNegocio != null
+          ? cfg.direccionNegocio
+          : CONFIG_DEFAULT.direccionNegocio,
+      mensajePie:
+        cfg.mensajePie != null ? cfg.mensajePie : CONFIG_DEFAULT.mensajePie
     };
     return _escribir(STORAGE_KEYS.config, merge);
   }
@@ -1062,6 +1304,13 @@
     // Registrar / revertir pagos
     construirMovimientoPago: construirMovimientoPago,
     revertirPago: revertirPago,
+
+    // Recibos (folio, periodo y datos de render)
+    periodoPorDefecto: periodoPorDefecto,
+    formatoPeriodo: formatoPeriodo,
+    generarFolio: generarFolio,
+    datosRecibo: datosRecibo,
+    textoWhatsAppRecibo: textoWhatsAppRecibo,
 
     // Persistencia
     cargarClientes: cargarClientes,
