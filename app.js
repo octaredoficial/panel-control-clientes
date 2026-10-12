@@ -2215,11 +2215,14 @@
     );
     var elEstado = $("#historial-estado");
     if (elEstado) {
-      // Etiqueta normalizada que cumple la promesa del README ("al corriente
-      // o vencido"): la clase 'vencido' se muestra como "Vencido" y cualquier
-      // otra ('proximo' / 'pagado' / 'ok') como "Al corriente". Se conserva el
-      // detalle de estadoPago entre parentesis para no perder contexto.
-      var etiquetaEstado = est.clase === "vencido" ? "Vencido" : "Al corriente";
+      // Etiqueta normalizada que cumple la promesa del README ("solo un cliente
+      // Activo y atrasado cuenta como vencido"): se reutiliza el predicado
+      // esVencido(cliente) (mismo criterio del chip Vencidos, la estadistica y
+      // el panel de Pagos), que exige estatus 'Activo' antes de considerar
+      // vencido. Un cliente Pausado con fecha pasada NO se rotula "Vencido".
+      // Se conserva el detalle de estadoPago entre parentesis y la clase CSS
+      // del badge (estado-<clase>) para no perder contexto ni color.
+      var etiquetaEstado = esVencido(cliente) ? "Vencido" : "Al corriente";
       elEstado.textContent = est.texto
         ? etiquetaEstado + " (" + est.texto + ")"
         : etiquetaEstado;
