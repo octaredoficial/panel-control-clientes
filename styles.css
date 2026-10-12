@@ -1036,6 +1036,223 @@ body {
   margin-top: 40px;
 }
 
+/* Dialogo mas ancho (p.ej. historial de pagos). */
+.modal__dialogo--ancho {
+  max-width: 640px;
+}
+
+.modal__titulo-sufijo {
+  color: var(--texto-suave);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+/* ---------------------- Modal de pago --------------------- */
+.pago__cliente {
+  color: var(--texto-suave);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.pago__cliente:empty {
+  display: none;
+}
+
+/* ---------------------- Recibo ---------------------------- */
+.recibo {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  padding: 22px 20px;
+  color: var(--texto);
+}
+
+.recibo__negocio {
+  text-align: center;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--borde-fuerte);
+}
+
+.recibo__negocio-nombre {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.recibo__negocio-dato {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+.recibo__negocio-dato[hidden] {
+  display: none;
+}
+
+.recibo__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px dashed var(--borde-fuerte);
+}
+
+.recibo__meta-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recibo__meta-etiqueta {
+  color: var(--texto-suave);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.recibo__meta-valor {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.recibo__cuerpo {
+  padding: 14px 0 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recibo__fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 0.95rem;
+}
+
+.recibo__etiqueta {
+  color: var(--texto-suave);
+}
+
+.recibo__valor {
+  font-weight: 600;
+  text-align: right;
+}
+
+.recibo__fila--monto {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borde);
+}
+
+.recibo__monto {
+  color: var(--verde);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.recibo__pie {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--borde-fuerte);
+  text-align: center;
+  color: var(--texto-suave);
+  font-size: 0.88rem;
+}
+
+.recibo__pie:empty {
+  display: none;
+}
+
+/* ---------------------- Estado de cuenta ------------------ */
+.estado-cuenta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.estado-cuenta__item {
+  background: var(--superficie-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.estado-cuenta__etiqueta {
+  color: var(--texto-suave);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.estado-cuenta__valor {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* El estado actual usa las clases estado-* (badge) ya existentes. */
+.estado-cuenta__valor.badge {
+  align-self: flex-start;
+  font-weight: 700;
+}
+
+/* ---------------------- Historial de pagos ---------------- */
+.historial {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.historial__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  padding: 12px 14px;
+}
+
+.historial__info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.historial__linea--principal {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.historial__monto {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.historial__periodo {
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+}
+
+.historial__linea--meta {
+  color: var(--texto-suave);
+  font-size: 0.82rem;
+}
+
+.historial__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ---------------------- Responsive ------------------------ */
 @media (max-width: 860px) {
   .metricas {
@@ -1064,8 +1281,19 @@ body {
   .metricas,
   .stats__grid,
   .stats-mes__lista,
-  .reparto__totales {
+  .reparto__totales,
+  .estado-cuenta {
     grid-template-columns: 1fr;
+  }
+
+  .historial__fila {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .historial__acciones .btn {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 
   .lista-tarjetas {
@@ -1102,5 +1330,76 @@ body {
     max-width: 100%;
     max-height: 92vh;
     border-radius: var(--radio) var(--radio) 0 0;
+  }
+}
+
+/* ---------------------- Impresion (recibo / PDF) ----------
+   Al imprimir (o "Guardar como PDF") solo debe salir el recibo. Se oculta
+   TODA la app y los demas modales; solo #modal-recibo y su contenido quedan
+   visibles. Dentro del recibo se ocultan los controles .no-imprimir
+   (cabecera del modal, overlay y botonera). El recibo se coloca al inicio
+   de la hoja, sin overlay ni marco de modal. */
+@media print {
+  /* Ocultar todo por defecto; luego revelar solo el recibo. */
+  body * {
+    visibility: hidden;
+  }
+
+  /* El overlay de login no debe tapar la impresion. */
+  .login {
+    display: none !important;
+  }
+
+  /* Cualquier modal que NO sea el del recibo se oculta por completo. */
+  .modal:not(#modal-recibo) {
+    display: none !important;
+  }
+
+  /* Revelar el modal del recibo y su contenido. */
+  #modal-recibo,
+  #modal-recibo * {
+    visibility: visible;
+  }
+
+  /* El modal del recibo se convierte en un contenedor plano: sin fondo,
+     posicionado al inicio de la hoja. */
+  #modal-recibo {
+    position: absolute;
+    inset: 0;
+    display: block;
+    padding: 0;
+    background: none;
+  }
+
+  #modal-recibo .modal__overlay {
+    display: none !important;
+  }
+
+  #modal-recibo .modal__dialogo {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  #modal-recibo .modal__cuerpo {
+    padding: 0;
+  }
+
+  /* El recibo ocupa la hoja, sin marco de tarjeta. */
+  #recibo {
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    max-width: 100%;
+  }
+
+  /* Controles que no se imprimen (botonera, cabecera del modal, overlay). */
+  .no-imprimir {
+    display: none !important;
   }
 }

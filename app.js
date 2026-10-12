@@ -1441,6 +1441,15 @@
     }
     return null;
   }
+  function movimientoPorId(id) {
+    var movs = movimientos();
+    for (var i = 0; i < movs.length; i++) {
+      if (movs[i] && movs[i].id === id) {
+        return movs[i];
+      }
+    }
+    return null;
+  }
 
   /* ----------------------------------------------------------
      Criterio UNICO de "vencido" (hallazgo de revision #1)
@@ -1979,11 +1988,70 @@
     window.open(url, "_blank");
   }
 
-  function accionPagar(cliente) {
+  /**
+   * abrirModalPago(cliente): abre el modal de confirmacion de pago. Precarga
+   * el id del cliente, prefija el monto con el del cliente y genera opciones
+   * de periodo alrededor del periodo por defecto (meses anteriores y
+   * siguientes), dejando preseleccionado el periodo por defecto.
+   */
+  function abrirModalPago(cliente) {
+    setValor("#pago-cliente-id", cliente.id);
+    setTexto("#pago-cliente-nombre", cliente.nombre || "");
+    setValor("#pago-monto", cliente.monto != null ? cliente.monto : "");
+
+    var porDefecto = PCC.periodoPorDefecto(cliente, new Date());
+    var opciones = construirOpcionesPeriodo(porDefecto, 3, 3);
+    var sel = $("#pago-periodo");
+    if (sel) {
+      sel.innerHTML = "";
+      opciones.forEach(function (periodo) {
+        var opt = document.createElement("option");
+        opt.value = periodo;
+        opt.textContent = PCC.formatoPeriodo(periodo) || periodo;
+        if (periodo === porDefecto) {
+          opt.selected = true;
+        }
+        sel.appendChild(opt);
+      });
+    }
+    abrirModal("#modal-pago");
+  }
+
+  /**
+   * construirOpcionesPeriodo(base, atras, adelante): devuelve una lista de
+   * periodos 'YYYY-MM' que abarca 'atras' meses antes y 'adelante' meses
+   * despues del periodo 'base', en orden cronologico. Determinista.
+   */
+  function construirOpcionesPeriodo(base, atras, adelante) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(base || ""));
+    var ref;
+    if (m) {
+      ref = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+    } else {
+      ref = inicioDeMes(new Date());
+    }
+    var lista = [];
+    for (var i = -atras; i <= adelante; i++) {
+      var d = new Date(ref.getFullYear(), ref.getMonth() + i, 1);
+      var mes = String(d.getMonth() + 1).padStart(2, "0");
+      lista.push(d.getFullYear() + "-" + mes);
+    }
+    return lista;
+  }
+
+  /**
+   * confirmarPago(ev): submit del modal de pago. Localiza al cliente, lee
+   * periodo y monto, construye el movimiento con folio consecutivo, lo
+   * guarda, avanza al cliente, re-renderiza y abre el recibo del pago
+   * recien creado.
+   */
+  function confirmarPago(ev) {
+    ev.preventDefault();
+    var id = valor("#pago-cliente-id");
     var lista = clientes();
     var idx = -1;
     for (var i = 0; i < lista.length; i++) {
-      if (lista[i].id === cliente.id) {
+      if (lista[i].id === id) {
         idx = i;
         break;
       }
@@ -1992,13 +2060,25 @@
       return;
     }
     var c = lista[idx];
+
+    var periodo = valor("#pago-periodo");
+    var montoRaw = valor("#pago-monto");
+    if (montoRaw === "" || isNaN(Number(montoRaw)) || Number(montoRaw) < 0) {
+      window.alert("El monto debe ser un número válido.");
+      return;
+    }
+
     var hoyISO = PCC.fechaISO(new Date());
 
-    // Registrar el movimiento de ingreso (pago). El movimiento guarda el
-    // estado PREVIO del cliente (prevUltimoPago/prevFechaProximoPago) para
-    // poder revertir el pago con exactitud si se pulso por error.
+    // Construir el movimiento con periodo y folio consecutivo del anio.
+    // El movimiento guarda el estado PREVIO del cliente para revertir.
     var movs = movimientos();
-    movs.push(PCC.construirMovimientoPago(c, hoyISO));
+    var movimiento = PCC.construirMovimientoPago(c, hoyISO, {
+      periodo: periodo,
+      monto: Number(montoRaw),
+      movimientos: movs
+    });
+    movs.push(movimiento);
     PCC.guardarMovimientos(movs);
 
     // Actualizar ultimoPago y recalcular proximo ciclo.
@@ -2006,7 +2086,214 @@
     c.fechaProximoPago = PCC.fechaISO(PCC.calcularProximoPago(c, new Date()));
     PCC.guardarClientes(lista);
 
+    cerrarModales();
     render();
+
+    // Abrir el recibo del pago recien creado (con el cliente ya actualizado).
+    mostrarRecibo(c, movimiento);
+  }
+
+  // Ultimo recibo mostrado: lo usan Imprimir y Enviar por WhatsApp.
+  var _ultimoRecibo = null;
+
+  /**
+   * mostrarRecibo(cliente, movimientoPago): arma los datos del recibo con el
+   * nucleo, pinta el contenido en #recibo y abre el modal del recibo.
+   * Guarda el ultimo recibo mostrado (datos + cliente) para Imprimir/WhatsApp.
+   */
+  function mostrarRecibo(cliente, movimientoPago) {
+    var datos = PCC.datosRecibo(cliente, movimientoPago, PCC.cargarConfig());
+    _ultimoRecibo = { datos: datos, cliente: cliente };
+
+    var negocio = datos.negocio || {};
+    setTexto("#recibo-negocio-nombre", negocio.nombre || "");
+
+    var elTel = $("#recibo-negocio-telefono");
+    if (elTel) {
+      elTel.textContent = negocio.telefono ? "Tel: " + negocio.telefono : "";
+      elTel.hidden = !negocio.telefono;
+    }
+    var elDir = $("#recibo-negocio-direccion");
+    if (elDir) {
+      elDir.textContent = negocio.direccion || "";
+      elDir.hidden = !negocio.direccion;
+    }
+
+    setTexto("#recibo-folio", datos.folio || "sin folio");
+    setTexto("#recibo-fecha", datos.fechaEmisionLarga || "");
+    setTexto("#recibo-cliente", datos.cliente ? datos.cliente.nombre : "");
+    setTexto("#recibo-periodo", datos.periodoTexto || "—");
+    setTexto("#recibo-concepto", datos.concepto || "");
+    setTexto("#recibo-monto", datos.montoTexto || PCC.formatoMoneda(datos.monto));
+    setTexto("#recibo-pie", negocio.pie || "");
+
+    abrirModal("#modal-recibo");
+  }
+
+  /**
+   * imprimirRecibo(): lanza la impresion del navegador (el @media print deja
+   * visible solo #recibo).
+   */
+  function imprimirRecibo() {
+    window.print();
+  }
+
+  /**
+   * enviarReciboWhatsApp(): abre WhatsApp con el resumen del recibo del
+   * ultimo recibo mostrado, usando el celular del cliente normalizado (+52).
+   */
+  function enviarReciboWhatsApp() {
+    if (!_ultimoRecibo) {
+      return;
+    }
+    var cliente = _ultimoRecibo.cliente || {};
+    var tel = normalizarCelular(cliente.celular);
+    if (!tel) {
+      window.alert("Este cliente no tiene un número de celular registrado.");
+      return;
+    }
+    var texto = PCC.textoWhatsAppRecibo(_ultimoRecibo.datos);
+    var url = "https://wa.me/" + tel + "?text=" + encodeURIComponent(texto);
+    window.open(url, "_blank");
+  }
+
+  /**
+   * abrirHistorial(cliente): filtra los pagos del cliente, calcula el estado
+   * de cuenta y pinta una fila por pago (fecha, periodo, monto, socio, folio)
+   * con botones para ver el recibo y revertir cuando aplica.
+   */
+  function abrirHistorial(cliente) {
+    var pagos = movimientos().filter(function (m) {
+      return m && m.esPago && m.clienteId === cliente.id;
+    });
+
+    // Ordenar por fecha descendente (mas reciente primero).
+    pagos.sort(function (a, b) {
+      var fa = PCC.aFecha(a.fecha);
+      var fb = PCC.aFecha(b.fecha);
+      return (fb ? fb.getTime() : 0) - (fa ? fa.getTime() : 0);
+    });
+
+    // Estado de cuenta.
+    var totalPagado = pagos.reduce(function (acc, m) {
+      return acc + (Number(m.monto) || 0);
+    }, 0);
+    var ultimoPagoMov = pagos.length ? pagos[0] : null;
+    var est = PCC.estadoPago(cliente, HOY);
+
+    setTexto("#historial-cliente", cliente.nombre ? "· " + cliente.nombre : "");
+    setTexto("#historial-total", PCC.formatoMoneda(totalPagado));
+    setTexto(
+      "#historial-ultimo",
+      ultimoPagoMov ? PCC.formatoFechaLarga(ultimoPagoMov.fecha) : "—"
+    );
+    setTexto(
+      "#historial-proximo",
+      cliente.fechaProximoPago ? PCC.formatoFechaLarga(cliente.fechaProximoPago) : "—"
+    );
+    var elEstado = $("#historial-estado");
+    if (elEstado) {
+      elEstado.textContent = est.texto;
+      elEstado.className = "estado-cuenta__valor badge estado-" + est.clase;
+    }
+
+    // El pago reversible es el ultimo pago del cliente (mismo criterio que
+    // la tarjeta): se compara por id contra ultimoPagoDeCliente.
+    var reversible = ultimoPagoDeCliente(cliente.id);
+    var reversibleId = reversible ? reversible.id : null;
+
+    var contenedor = $("#historial-lista");
+    var vacio = $("#historial-vacio");
+    if (!contenedor) {
+      return;
+    }
+    limpiarTarjetas(contenedor, vacio);
+
+    if (pagos.length === 0) {
+      if (vacio) {
+        vacio.hidden = false;
+      }
+      abrirModal("#modal-historial");
+      return;
+    }
+    if (vacio) {
+      vacio.hidden = true;
+    }
+
+    pagos.forEach(function (mov) {
+      contenedor.appendChild(
+        crearFilaHistorial(cliente, mov, mov.id === reversibleId)
+      );
+    });
+
+    abrirModal("#modal-historial");
+  }
+
+  /**
+   * crearFilaHistorial(cliente, mov, esReversible): construye el nodo DOM de
+   * una fila del historial. El movimiento se identifica por data-mov-id para
+   * la delegacion de 'Ver recibo' / 'Revertir'.
+   */
+  function crearFilaHistorial(cliente, mov, esReversible) {
+    var fila = document.createElement("div");
+    fila.className = "historial__fila";
+    fila.setAttribute("data-mov-id", mov.id);
+
+    var periodoTexto = PCC.formatoPeriodo(mov.periodo);
+    if (!periodoTexto) {
+      // Pago viejo sin periodo: derivar del mes de la fecha.
+      periodoTexto = PCC.formatoPeriodo(
+        PCC.periodoPorDefecto({ fechaProximoPago: mov.fecha }, mov.fecha)
+      );
+    }
+    var socio = cliente.socio === "Octavio" ? "Octavio" : "Carlos";
+
+    var info = document.createElement("div");
+    info.className = "historial__info";
+
+    var linea1 = document.createElement("div");
+    linea1.className = "historial__linea historial__linea--principal";
+    var monto = document.createElement("span");
+    monto.className = "historial__monto";
+    monto.textContent = PCC.formatoMoneda(mov.monto);
+    var periodo = document.createElement("span");
+    periodo.className = "historial__periodo";
+    periodo.textContent = periodoTexto || "—";
+    linea1.appendChild(monto);
+    linea1.appendChild(periodo);
+
+    var linea2 = document.createElement("div");
+    linea2.className = "historial__linea historial__linea--meta";
+    linea2.textContent =
+      PCC.formatoFechaLarga(mov.fecha) +
+      " · Paga a: " +
+      socio +
+      " · Folio: " +
+      (mov.folio ? mov.folio : "sin folio");
+
+    info.appendChild(linea1);
+    info.appendChild(linea2);
+
+    var acciones = document.createElement("div");
+    acciones.className = "historial__acciones";
+
+    var btnRecibo = document.createElement("button");
+    btnRecibo.type = "button";
+    btnRecibo.className = "btn btn--chip historial-ver-recibo";
+    btnRecibo.innerHTML = '<span aria-hidden="true">🧾</span> Ver recibo';
+    acciones.appendChild(btnRecibo);
+
+    if (esReversible) {
+      var btnRev = document.createElement("button");
+      btnRev.type = "button";
+      btnRev.className = "btn btn--chip btn--revertir historial-revertir";
+      btnRev.innerHTML = '<span aria-hidden="true">↩️</span> Revertir';
+      acciones.appendChild(btnRev);
+    }
+
+    fila.appendChild(info);
+    fila.appendChild(acciones);
+    return fila;
   }
 
   /**
@@ -2077,6 +2364,48 @@
     }
 
     render();
+  }
+
+  /**
+   * revertirDesdeHistorial(cliente, mov): revierte un pago concreto desde el
+   * modal de historial, reutilizando la logica del nucleo (PCC.revertirPago).
+   * Tras revertir, refresca el render principal y vuelve a pintar el historial
+   * del mismo cliente para que quede al dia.
+   */
+  function revertirDesdeHistorial(cliente, mov) {
+    var ok = window.confirm(
+      '¿Revertir este pago de "' +
+        (cliente.nombre || "") +
+        '"? El cliente volverá a quedar como estaba antes del pago.'
+    );
+    if (!ok) {
+      return;
+    }
+
+    var resultado = PCC.revertirPago(mov.id, clientes(), movimientos());
+    if (!resultado.revertido) {
+      return;
+    }
+    PCC.guardarMovimientos(resultado.movimientos);
+    PCC.guardarClientes(resultado.clientes);
+
+    if (resultado.usoFallback) {
+      window.alert(
+        "El pago se revirtió, pero era un pago antiguo sin datos de " +
+          "reversión. Se recalculó la fecha de próximo pago; conviene " +
+          "revisarla por si no coincide con la que tenía antes."
+      );
+    }
+
+    render();
+
+    // Refrescar el historial con el cliente ya actualizado (si sigue existiendo).
+    var actualizado = clientePorId(cliente.id);
+    if (actualizado) {
+      abrirHistorial(actualizado);
+    } else {
+      cerrarModales();
+    }
   }
 
   function accionPausar(cliente) {
@@ -2280,6 +2609,11 @@
     setValor("#config-costo-luz", cfg.costoLuz);
     setValor("#config-luz-periodicidad", cfg.luzPeriodicidadMeses);
     setValor("#config-luz-ancla", cfg.luzMesAncla);
+    // Datos del negocio para el recibo (FEAT-003).
+    setValor("#config-nombre-negocio", cfg.nombreNegocio);
+    setValor("#config-telefono-contacto", cfg.telefonoContacto);
+    setValor("#config-direccion-negocio", cfg.direccionNegocio);
+    setValor("#config-mensaje-pie", cfg.mensajePie);
     abrirModal("#modal-config");
   }
 
@@ -2320,6 +2654,13 @@
       return;
     }
 
+    // Datos del negocio para el recibo (FEAT-003). Validacion minima:
+    // si el nombre del negocio queda vacio, usar el generico 'Mi WISP'.
+    var nombreNegocio = (valor("#config-nombre-negocio") || "").trim();
+    if (!nombreNegocio) {
+      nombreNegocio = "Mi WISP";
+    }
+
     PCC.guardarConfig({
       diasAviso: dias,
       moneda: valor("#config-moneda") || "MXN",
@@ -2327,7 +2668,11 @@
       numAntenas: numAntenas,
       costoLuz: costoLuz,
       luzPeriodicidadMeses: luzPeriodicidad,
-      luzMesAncla: luzMesAncla
+      luzMesAncla: luzMesAncla,
+      nombreNegocio: nombreNegocio,
+      telefonoContacto: (valor("#config-telefono-contacto") || "").trim(),
+      direccionNegocio: (valor("#config-direccion-negocio") || "").trim(),
+      mensajePie: (valor("#config-mensaje-pie") || "").trim()
     });
     cerrarModales();
     render();
@@ -2547,7 +2892,9 @@
         if (boton.classList.contains("accion-avisar")) {
           accionAvisar(cliente);
         } else if (boton.classList.contains("accion-pagar")) {
-          accionPagar(cliente);
+          abrirModalPago(cliente);
+        } else if (boton.classList.contains("accion-historial")) {
+          abrirHistorial(cliente);
         } else if (boton.classList.contains("accion-revertir")) {
           accionRevertir(cliente);
         } else if (boton.classList.contains("accion-editar")) {
@@ -2573,6 +2920,37 @@
     });
     on("#form-config", "submit", guardarConfig);
     on("#btn-reiniciar-datos", "click", reiniciarDatos);
+
+    // Pago, recibo e historial (FEAT-003).
+    on("#form-pago", "submit", confirmarPago);
+    on("#btn-recibo-imprimir", "click", imprimirRecibo);
+    on("#btn-recibo-whatsapp", "click", enviarReciboWhatsApp);
+
+    // Historial: delegacion de click para 'Ver recibo' y 'Revertir' por fila.
+    on("#historial-lista", "click", function (ev) {
+      var boton = ev.target.closest("button");
+      if (!boton) {
+        return;
+      }
+      var fila = ev.target.closest(".historial__fila");
+      if (!fila) {
+        return;
+      }
+      var movId = fila.getAttribute("data-mov-id");
+      var mov = movimientoPorId(movId);
+      if (!mov) {
+        return;
+      }
+      var cliente = clientePorId(mov.clienteId);
+      if (!cliente) {
+        return;
+      }
+      if (boton.classList.contains("historial-ver-recibo")) {
+        mostrarRecibo(cliente, mov);
+      } else if (boton.classList.contains("historial-revertir")) {
+        revertirDesdeHistorial(cliente, mov);
+      }
+    });
 
     // Cierre de modales (botones/overlay con data-cerrar-modal).
     $all("[data-cerrar-modal]").forEach(function (el) {

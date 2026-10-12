@@ -368,6 +368,9 @@
         <button type="button" class="btn btn--chip btn--revertir accion-revertir" title="Revertir el último pago" aria-label="Revertir el último pago" hidden>
           <span aria-hidden="true">↩️</span> Revertir
         </button>
+        <button type="button" class="btn btn--chip accion-historial" title="Historial de pagos" aria-label="Historial de pagos">
+          <span aria-hidden="true">📜</span> Historial
+        </button>
         <button type="button" class="btn btn--icono accion-editar" title="Editar" aria-label="Editar">✏️</button>
         <button type="button" class="btn btn--icono accion-pausar" title="Pausar / Reanudar" aria-label="Pausar o reanudar">⏸️</button>
         <button type="button" class="btn btn--icono btn--peligro accion-eliminar" title="Eliminar" aria-label="Eliminar">🗑️</button>
@@ -619,11 +622,159 @@
           </button>
           <p class="campo-ayuda">Reemplaza todos los clientes y movimientos por el conjunto de datos de ejemplo.</p>
         </div>
+        <div class="campo-grupo">
+          <h3 class="config-subtitulo">Datos del negocio (recibo)</h3>
+          <p class="campo-ayuda">Aparecen en los recibos de pago. Puedes dejarlos con valores genéricos y ajustarlos después.</p>
+        </div>
+        <div class="campo-grupo">
+          <label class="campo-label" for="config-nombre-negocio">Nombre del negocio</label>
+          <input type="text" id="config-nombre-negocio" name="nombreNegocio" class="campo" placeholder="Mi WISP" value="Mi WISP" />
+        </div>
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="config-telefono-contacto">Teléfono de contacto</label>
+            <input type="tel" id="config-telefono-contacto" name="telefonoContacto" class="campo" inputmode="numeric" placeholder="10 dígitos" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="config-direccion-negocio">Dirección</label>
+            <input type="text" id="config-direccion-negocio" name="direccionNegocio" class="campo" placeholder="Calle, colonia, ciudad" />
+          </div>
+        </div>
+        <div class="campo-grupo">
+          <label class="campo-label" for="config-mensaje-pie">Mensaje de pie del recibo</label>
+          <textarea id="config-mensaje-pie" name="mensajePie" class="campo" rows="2" placeholder="Gracias por su preferencia."></textarea>
+        </div>
+
         <div class="modal__acciones">
           <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
           <button type="submit" class="btn btn--primario">Guardar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ----- Modal Registrar pago (seleccion de periodo y monto) ----- -->
+  <div class="modal" id="modal-pago" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-pago-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-pago-titulo">Registrar pago</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <form class="modal__cuerpo" id="form-pago">
+        <input type="hidden" id="pago-cliente-id" name="clienteId" value="" />
+        <p class="pago__cliente" id="pago-cliente-nombre"></p>
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="pago-periodo">Mensualidad que cubre</label>
+            <select id="pago-periodo" name="periodo" class="campo campo--select"></select>
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="pago-monto">Monto cobrado</label>
+            <input type="number" id="pago-monto" name="monto" class="campo" min="0" step="1" />
+          </div>
+        </div>
+        <div class="modal__acciones">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn--primario">Confirmar pago</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ----- Modal Recibo (imprimible / WhatsApp) ----- -->
+  <div class="modal" id="modal-recibo" hidden>
+    <div class="modal__overlay no-imprimir" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-recibo-titulo">
+      <div class="modal__cabecera no-imprimir">
+        <h2 class="modal__titulo" id="modal-recibo-titulo">Recibo de pago</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal__cuerpo">
+        <div id="recibo" class="recibo">
+          <div class="recibo__negocio">
+            <h3 class="recibo__negocio-nombre" id="recibo-negocio-nombre"></h3>
+            <p class="recibo__negocio-dato" id="recibo-negocio-telefono"></p>
+            <p class="recibo__negocio-dato" id="recibo-negocio-direccion"></p>
+          </div>
+          <div class="recibo__meta">
+            <div class="recibo__meta-fila">
+              <span class="recibo__meta-etiqueta">Folio</span>
+              <span class="recibo__meta-valor" id="recibo-folio"></span>
+            </div>
+            <div class="recibo__meta-fila">
+              <span class="recibo__meta-etiqueta">Fecha de emisión</span>
+              <span class="recibo__meta-valor" id="recibo-fecha"></span>
+            </div>
+          </div>
+          <div class="recibo__cuerpo">
+            <div class="recibo__fila">
+              <span class="recibo__etiqueta">Cliente</span>
+              <span class="recibo__valor" id="recibo-cliente"></span>
+            </div>
+            <div class="recibo__fila">
+              <span class="recibo__etiqueta">Periodo que cubre</span>
+              <span class="recibo__valor" id="recibo-periodo"></span>
+            </div>
+            <div class="recibo__fila">
+              <span class="recibo__etiqueta">Concepto</span>
+              <span class="recibo__valor" id="recibo-concepto"></span>
+            </div>
+            <div class="recibo__fila recibo__fila--monto">
+              <span class="recibo__etiqueta">Monto pagado</span>
+              <span class="recibo__valor recibo__monto" id="recibo-monto"></span>
+            </div>
+          </div>
+          <p class="recibo__pie" id="recibo-pie"></p>
+        </div>
+        <div class="modal__acciones no-imprimir">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cerrar</button>
+          <button type="button" id="btn-recibo-whatsapp" class="btn btn--secundario">
+            <span class="btn__icono" aria-hidden="true">💬</span>
+            <span>Enviar por WhatsApp</span>
+          </button>
+          <button type="button" id="btn-recibo-imprimir" class="btn btn--primario">
+            <span class="btn__icono" aria-hidden="true">🖨️</span>
+            <span>Imprimir / PDF</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ----- Modal Historial de pagos ----- -->
+  <div class="modal" id="modal-historial" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo modal__dialogo--ancho" role="dialog" aria-modal="true" aria-labelledby="modal-historial-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-historial-titulo">Historial de pagos
+          <span class="modal__titulo-sufijo" id="historial-cliente"></span>
+        </h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal__cuerpo">
+        <div class="estado-cuenta">
+          <article class="estado-cuenta__item">
+            <span class="estado-cuenta__etiqueta">Total pagado</span>
+            <span class="estado-cuenta__valor" id="historial-total">$0.00</span>
+          </article>
+          <article class="estado-cuenta__item">
+            <span class="estado-cuenta__etiqueta">Último pago</span>
+            <span class="estado-cuenta__valor" id="historial-ultimo">—</span>
+          </article>
+          <article class="estado-cuenta__item">
+            <span class="estado-cuenta__etiqueta">Próximo vencimiento</span>
+            <span class="estado-cuenta__valor" id="historial-proximo">—</span>
+          </article>
+          <article class="estado-cuenta__item">
+            <span class="estado-cuenta__etiqueta">Estado actual</span>
+            <span class="estado-cuenta__valor" id="historial-estado">—</span>
+          </article>
+        </div>
+        <div class="historial" id="historial-lista">
+          <p class="estado-vacio" id="historial-vacio">Este cliente aún no tiene pagos registrados.</p>
+        </div>
+      </div>
     </div>
   </div>
 
