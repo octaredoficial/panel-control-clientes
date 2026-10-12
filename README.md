@@ -89,6 +89,17 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 
 > El botón **Avisar** (WhatsApp) **sigue funcionando igual** que antes: abre un enlace `https://wa.me/...` con el mensaje prellenado.
 
+### Verificación manual del Historial de pagos y Recibos
+
+Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-y-recibos)), comprueba a mano en el navegador:
+
+1. **Inicia sesión** (con Google o como invitado).
+2. **Registrar un pago:** pulsa **✔️ Pagar** en un cliente, elige la **mensualidad que cubre** (periodo) y ajusta el **monto**, y **Confirma**. Debe abrirse el **recibo** con su **folio** `REC-AAAA-NNNN`.
+3. **Imprimir / PDF:** pulsa **🖨️ Imprimir / PDF** y confirma que en la vista previa **solo aparece el recibo** (no todo el panel); elige **"Guardar como PDF"** como destino para obtener el archivo.
+4. **WhatsApp:** pulsa **💬 Enviar por WhatsApp** y verifica que se abre `https://wa.me/...` con el **resumen prellenado** (folio, periodo, concepto y monto).
+5. **Historial:** abre el **📜 Historial** del cliente y comprueba el **estado de cuenta** (total pagado, último pago, próximo vencimiento, al corriente/vencido) y la **lista de pagos**; usa **🧾 Ver recibo** en una fila para **reimprimir** un recibo anterior.
+6. **Sincronización:** en **otro dispositivo** logueado, confirma que el pago recién registrado aparece **con su folio y periodo**, sin recargar.
+
 ## Funcionalidades
 
 - **Resumen mensual** con navegación por meses (botones `‹` y `›`):
@@ -131,6 +142,66 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 **Cómo funciona por dentro:** al registrar un pago, la aplicación guarda dentro del propio movimiento el estado previo del cliente (`prevUltimoPago` y `prevFechaProximoPago`). Revertir simplemente borra ese movimiento y restaura esos valores tal cual, sin tener que recalcular nada, de modo que la reversión es exacta.
 
 > **Limitación (pagos antiguos):** los pagos registrados con **versiones anteriores** de la app no guardan ese estado previo. Si reviertes uno de esos pagos antiguos, la app hace un *fallback seguro*: limpia el último pago y **recalcula** la fecha de próximo pago. En ese caso te avisa con un mensaje y conviene revisar la fecha por si no coincide con la que tenía exactamente antes. Los pagos hechos a partir de esta versión se revierten siempre con exactitud.
+
+## Historial de pagos y Recibos
+
+Cada pago que registras genera un **recibo** y queda guardado en el **historial del cliente**. Así puedes consultar su estado de cuenta, reimprimir recibos y compartirlos por WhatsApp, todo desde su tarjeta y sin salir de la app.
+
+### El historial del cliente (botón 📜)
+
+En la tarjeta de cada cliente aparece el botón **📜 Historial**. Al pulsarlo se abre una ventana con:
+
+- Un **estado de cuenta** con cuatro datos: **Total pagado** (suma histórica de todos sus pagos cobrados), **Último pago**, **Próximo vencimiento** y **Estado actual** (**al corriente** o **vencido**, con el mismo criterio que el resto de la app: solo un cliente **Activo** y atrasado cuenta como vencido).
+- La **lista de pagos** del cliente ordenada de más reciente a más antiguo. Cada fila muestra la **fecha** del pago, el **periodo** (mensualidad) que cubre, el **monto**, el **socio** al que pagó y el **folio** del recibo.
+- Botones por fila para **🧾 Ver recibo** (reimprime o reenvía ese recibo) y **↩️ Revertir** (solo en el último pago reversible del cliente, igual que en la tarjeta).
+
+Si el cliente aún no tiene pagos, se muestra un aviso de historial vacío.
+
+### Registrar un pago eligiendo periodo y monto
+
+Al pulsar **✔️ Pagar** en una tarjeta ya no se cobra de golpe: se abre el modal **Registrar pago**, donde eliges:
+
+- **Mensualidad que cubre** (el **periodo**): un desplegable con los meses alrededor del vencimiento. Por defecto se selecciona el **mes de la fecha de próximo pago** del cliente y, si no la tuviera, el **mes en curso**.
+- **Monto cobrado**: viene relleno con el monto habitual del cliente, pero puedes ajustarlo (por ejemplo, un cobro parcial o con recargo).
+
+Al **Confirmar pago**, la app registra el movimiento, avanza la fecha de próximo pago del cliente y abre **de inmediato el recibo**.
+
+### El recibo y su folio
+
+El recibo se arma automáticamente con los **datos del negocio** (ver más abajo), el **cliente**, el **periodo que cubre**, el **concepto**, el **monto** y un **folio**.
+
+El **folio** tiene el formato **`REC-AAAA-NNNN`** (por ejemplo `REC-2026-0001`): el prefijo `REC`, el **año** del pago y un **consecutivo de 4 dígitos**. El consecutivo es **por año** y se calcula en el momento de registrar el pago como **(folio máximo existente de ese mismo año) + 1**; el primer recibo de cada año empieza en `0001`.
+
+> **Limitación conocida del folio:** como el consecutivo se calcula en el dispositivo a partir de los pagos que ya conoce, existe una **colisión teórica** si **dos dispositivos registran un pago en el mismo instante** antes de sincronizarse (podrían asignar el mismo número). Para el volumen de este negocio es **aceptable**; si ocurriera, basta con corregir el folio del pago afectado. El envío totalmente desatendido con numeración centralizada quedaría para una fase con backend.
+
+### Imprimir o guardar el recibo en PDF
+
+El botón **🖨️ Imprimir / PDF** usa la **impresión del propio navegador** (`window.print`). Una hoja de estilos **`@media print`** oculta el resto de la aplicación y deja **solo el recibo** en la hoja, de modo que no se imprime el panel completo.
+
+Para obtener un **PDF**, en el diálogo de impresión elige **"Guardar como PDF"** (o "Microsoft Print to PDF") como destino. **No se usan librerías externas**: todo es el navegador más CSS de impresión.
+
+### Enviar el recibo por WhatsApp
+
+El botón **💬 Enviar por WhatsApp** abre un enlace **`https://wa.me/<número>?text=<resumen>`** con el resumen del recibo **prellenado**: nombre del negocio, **folio**, cliente, **periodo**, concepto, **monto** y fecha, más el mensaje de pie. Reutiliza la misma **normalización de celular** del botón Avisar (a los números de **10 dígitos** se les antepone el código de México **52**).
+
+> El envío **totalmente automático** (sin abrir WhatsApp, mediante la **WhatsApp Business API**) queda **fuera de esta fase**: requeriría un backend o Cloud Functions y se abordará más adelante.
+
+### Datos del negocio (en Configuración)
+
+Los textos que salen en el recibo se editan desde el modal de **Configuración ⚙️**, bajo **"Datos del negocio (recibo)"**. Son cuatro campos, con **valores genéricos por defecto** que puedes personalizar cuando quieras:
+
+- **`nombreNegocio`**: nombre comercial que encabeza el recibo. Por defecto **"Mi WISP"**.
+- **`telefonoContacto`**: teléfono de contacto del negocio (texto libre). Vacío por defecto.
+- **`direccionNegocio`**: domicilio o referencia del negocio. Vacío por defecto.
+- **`mensajePie`**: línea de agradecimiento al pie del recibo. Por defecto **"Gracias por su preferencia."**.
+
+Estos datos **viajan dentro de la configuración** (`config/app`) y se **sincronizan** en la nube como el resto de la app, así que aparecen igual en todos tus dispositivos.
+
+### Cómo se guarda en Firebase
+
+Los campos nuevos (**`folio`** y **`periodo`**) viajan **dentro del propio objeto del movimiento** en la colección **`movimientos`**, **sin cambios de esquema** ni colecciones nuevas: un pago sigue siendo un movimiento con `esPago: true`.
+
+Los **pagos antiguos** (registrados antes de esta fase, **sin folio ni periodo**) siguen funcionando: al verlos o reimprimir su recibo se aplica un **fallback** que muestra el folio como **"sin folio"** y deriva el periodo del **mes de la fecha del pago**.
 
 ## Reparto de fin de mes entre socios
 
@@ -221,6 +292,7 @@ Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp
 
 ## Qué se probó
 
+- El arnés de pruebas completa **96 comprobaciones con 0 fallos**.
 - `node --check app.js` pasa sin errores de sintaxis.
 - Carga del núcleo con un `localStorage` simulado: se siembran **24 clientes** de ejemplo; `formatoMoneda(500)` devuelve `$500.00` y `formatoFechaLarga("2026-09-29")` devuelve `29 de septiembre de 2026`.
 - Clasificación de estados correcta sobre los datos de ejemplo (vencidos, próximos y pagados).
@@ -233,5 +305,11 @@ Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp
 - **Gastos fijos del mes** (`gastosFijosDelMes`): total **$2,910** en noviembre (Starlink $2,610 + luz $300) y **$2,610** en diciembre (sin luz).
 - **Reparto** (`calcularReparto`): sobre un escenario con pagos de clientes de ambos socios, se verifica que *Ingresos del mes* cuenta solo los pagos `esPago` del mes (ignora los ingresos manuales y los pagos de otros meses), que `gananciaRepartir = ingresos − gastos fijos − pagos de Octavio`, que la mitad de cada socio es correcta y que *Total Carlos* es su mitad mientras que *Total Octavio* es su mitad más sus pagos directos; un pago sin cliente asociado no se atribuye a Octavio.
 - **Revertir pago** (`construirMovimientoPago` / `revertirPago`): al pagar, el movimiento guarda el estado previo del cliente (`prevUltimoPago` y `prevFechaProximoPago`); al revertir, se elimina el movimiento del cobro y se restauran **exactamente** esos valores. Para un pago antiguo **sin** esos datos se verifica el *fallback*: limpia el último pago y recalcula la fecha de próximo pago. Un `id` inexistente o un movimiento que no es un pago no modifican nada.
+- **Folio consecutivo por año** (`generarFolio`): calcula `REC-AAAA-NNNN` tomando el máximo consecutivo del **mismo año** y sumando 1 (el primero del año empieza en `0001`); ignora folios de otros años y pagos sin folio.
+- **Periodo por defecto** (`periodoPorDefecto`): devuelve el `YYYY-MM` del **próximo pago** del cliente y, si no lo tiene, el **mes de referencia**; `construirMovimientoPago` respeta el periodo y el monto indicados y, cuando recibe la lista de movimientos, asigna un folio consecutivo (p. ej. `REC-2026-0008`), dando prioridad a un folio explícito.
+- **Formato de periodo** (`formatoPeriodo`): convierte `YYYY-MM` a texto en español (p. ej. *febrero 2026*) y devuelve `''` ante entradas vacías o inválidas.
+- **Datos del recibo** (`datosRecibo`): arma el recibo con el nombre del negocio por defecto y el monto formateado; para **pagos viejos sin folio/periodo** aplica el *fallback* (folio **"sin folio"** y periodo derivado de la **fecha del pago**).
+- **Texto de WhatsApp del recibo** (`textoWhatsAppRecibo`): el resumen incluye el **folio**, el **monto formateado** y el **nombre del negocio**.
+- **Migración de los datos del negocio**: una `pcc.config` antigua migra añadiendo `nombreNegocio` (**"Mi WISP"**), `telefonoContacto`, `direccionNegocio` y `mensajePie` (**"Gracias por su preferencia."**) con sus valores por defecto.
 - La capa de interfaz se inicializa y ejecuta el render completo sin lanzar errores (verificado con un DOM simulado).
-- Revisión funcional recomendada en el navegador: crear / editar / pausar / eliminar clientes, buscar, filtrar por cada chip, ordenar, exportar CSV, cambiar de mes, abrir cada modal, registrar gastos / ingresos / ahorros, **pagar un cliente y luego pulsar ↩️ Revertir para confirmar que vuelve a su estado anterior** (y que el Resumen y el Reparto se recalculan), alternar el modo oscuro y recargar para confirmar la persistencia; la consola debe quedar sin errores.
+- Revisión funcional recomendada en el navegador: crear / editar / pausar / eliminar clientes, buscar, filtrar por cada chip, ordenar, exportar CSV, cambiar de mes, abrir cada modal, registrar gastos / ingresos / ahorros, **pagar un cliente y luego pulsar ↩️ Revertir para confirmar que vuelve a su estado anterior** (y que el Resumen y el Reparto se recalculan), **registrar un pago eligiendo periodo y monto, ver / imprimir el recibo y abrir el 📜 Historial** (ver [Verificación manual del Historial de pagos y Recibos](#verificación-manual-del-historial-de-pagos-y-recibos)), alternar el modo oscuro y recargar para confirmar la persistencia; la consola debe quedar sin errores.
