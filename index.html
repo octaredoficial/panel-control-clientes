@@ -684,11 +684,11 @@
 
   <!-- ----- Modal Recibo (imprimible / WhatsApp) ----- -->
   <div class="modal" id="modal-recibo" hidden>
-    <div class="modal__overlay no-imprimir" data-cerrar-modal></div>
+    <div class="modal__overlay no-imprimir" data-cerrar-recibo></div>
     <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-recibo-titulo">
       <div class="modal__cabecera no-imprimir">
         <h2 class="modal__titulo" id="modal-recibo-titulo">Recibo de pago</h2>
-        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+        <button type="button" class="btn btn--icono" data-cerrar-recibo aria-label="Cerrar">✕</button>
       </div>
       <div class="modal__cuerpo">
         <div id="recibo" class="recibo">
@@ -728,7 +728,7 @@
           <p class="recibo__pie" id="recibo-pie"></p>
         </div>
         <div class="modal__acciones no-imprimir">
-          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cerrar</button>
+          <button type="button" class="btn btn--secundario" data-cerrar-recibo>Cerrar</button>
           <button type="button" id="btn-recibo-whatsapp" class="btn btn--secundario">
             <span class="btn__icono" aria-hidden="true">💬</span>
             <span>Enviar por WhatsApp</span>
@@ -760,15 +760,15 @@
           </article>
           <article class="estado-cuenta__item">
             <span class="estado-cuenta__etiqueta">Último pago</span>
-            <span class="estado-cuenta__valor" id="historial-ultimo">—</span>
+            <span class="estado-cuenta__valor" id="historial-ultimo">Sin registro</span>
           </article>
           <article class="estado-cuenta__item">
             <span class="estado-cuenta__etiqueta">Próximo vencimiento</span>
-            <span class="estado-cuenta__valor" id="historial-proximo">—</span>
+            <span class="estado-cuenta__valor" id="historial-proximo">Sin registro</span>
           </article>
           <article class="estado-cuenta__item">
             <span class="estado-cuenta__etiqueta">Estado actual</span>
-            <span class="estado-cuenta__valor" id="historial-estado">—</span>
+            <span class="estado-cuenta__valor" id="historial-estado">Sin registro</span>
           </article>
         </div>
         <div class="historial" id="historial-lista">

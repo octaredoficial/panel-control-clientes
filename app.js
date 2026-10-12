@@ -2096,12 +2096,20 @@
   // Ultimo recibo mostrado: lo usan Imprimir y Enviar por WhatsApp.
   var _ultimoRecibo = null;
 
+  // Recuerda si el recibo abierto proviene del historial. Si es asi, al
+  // cerrarlo solo se oculta #modal-recibo y el historial queda visible debajo;
+  // si proviene del flujo de pago, cerrarlo devuelve al panel (cierra todo).
+  var _reciboVieneDeHistorial = false;
+
   /**
-   * mostrarRecibo(cliente, movimientoPago): arma los datos del recibo con el
-   * nucleo, pinta el contenido en #recibo y abre el modal del recibo.
-   * Guarda el ultimo recibo mostrado (datos + cliente) para Imprimir/WhatsApp.
+   * mostrarRecibo(cliente, movimientoPago, desdeHistorial): arma los datos del
+   * recibo con el nucleo, pinta el contenido en #recibo y abre el modal del
+   * recibo. Guarda el ultimo recibo mostrado (datos + cliente) para
+   * Imprimir/WhatsApp y recuerda el origen (historial o flujo de pago) para
+   * decidir como se cierra.
    */
-  function mostrarRecibo(cliente, movimientoPago) {
+  function mostrarRecibo(cliente, movimientoPago, desdeHistorial) {
+    _reciboVieneDeHistorial = !!desdeHistorial;
     var datos = PCC.datosRecibo(cliente, movimientoPago, PCC.cargarConfig());
     _ultimoRecibo = { datos: datos, cliente: cliente };
 
@@ -2122,12 +2130,26 @@
     setTexto("#recibo-folio", datos.folio || "sin folio");
     setTexto("#recibo-fecha", datos.fechaEmisionLarga || "");
     setTexto("#recibo-cliente", datos.cliente ? datos.cliente.nombre : "");
-    setTexto("#recibo-periodo", datos.periodoTexto || "—");
+    setTexto("#recibo-periodo", datos.periodoTexto || "Sin registro");
     setTexto("#recibo-concepto", datos.concepto || "");
     setTexto("#recibo-monto", datos.montoTexto || PCC.formatoMoneda(datos.monto));
     setTexto("#recibo-pie", negocio.pie || "");
 
     abrirModal("#modal-recibo");
+  }
+
+  /**
+   * cerrarRecibo(): cierra solo #modal-recibo. Si el recibo se abrio desde el
+   * historial, deja #modal-historial visible debajo (no saca al usuario al
+   * panel); si vino del flujo de pago, no hay otro modal apilado, asi que
+   * ocultar solo el recibo tambien devuelve al panel.
+   */
+  function cerrarRecibo() {
+    var modal = $("#modal-recibo");
+    if (modal) {
+      modal.hidden = true;
+    }
+    _reciboVieneDeHistorial = false;
   }
 
   /**
@@ -2185,15 +2207,22 @@
     setTexto("#historial-total", PCC.formatoMoneda(totalPagado));
     setTexto(
       "#historial-ultimo",
-      ultimoPagoMov ? PCC.formatoFechaLarga(ultimoPagoMov.fecha) : "—"
+      ultimoPagoMov ? PCC.formatoFechaLarga(ultimoPagoMov.fecha) : "Sin registro"
     );
     setTexto(
       "#historial-proximo",
-      cliente.fechaProximoPago ? PCC.formatoFechaLarga(cliente.fechaProximoPago) : "—"
+      cliente.fechaProximoPago ? PCC.formatoFechaLarga(cliente.fechaProximoPago) : "Sin registro"
     );
     var elEstado = $("#historial-estado");
     if (elEstado) {
-      elEstado.textContent = est.texto;
+      // Etiqueta normalizada que cumple la promesa del README ("al corriente
+      // o vencido"): la clase 'vencido' se muestra como "Vencido" y cualquier
+      // otra ('proximo' / 'pagado' / 'ok') como "Al corriente". Se conserva el
+      // detalle de estadoPago entre parentesis para no perder contexto.
+      var etiquetaEstado = est.clase === "vencido" ? "Vencido" : "Al corriente";
+      elEstado.textContent = est.texto
+        ? etiquetaEstado + " (" + est.texto + ")"
+        : etiquetaEstado;
       elEstado.className = "estado-cuenta__valor badge estado-" + est.clase;
     }
 
@@ -2258,7 +2287,7 @@
     monto.textContent = PCC.formatoMoneda(mov.monto);
     var periodo = document.createElement("span");
     periodo.className = "historial__periodo";
-    periodo.textContent = periodoTexto || "—";
+    periodo.textContent = periodoTexto || "Sin registro";
     linea1.appendChild(monto);
     linea1.appendChild(periodo);
 
@@ -2946,7 +2975,7 @@
         return;
       }
       if (boton.classList.contains("historial-ver-recibo")) {
-        mostrarRecibo(cliente, mov);
+        mostrarRecibo(cliente, mov, true);
       } else if (boton.classList.contains("historial-revertir")) {
         revertirDesdeHistorial(cliente, mov);
       }
@@ -2957,9 +2986,24 @@
       el.addEventListener("click", cerrarModales);
     });
 
-    // Cerrar modal con Escape.
+    // Cierre especifico del recibo (botones/overlay con data-cerrar-recibo):
+    // solo oculta #modal-recibo para no sacar al usuario del historial cuando
+    // el recibo se abrio desde ahi.
+    $all("[data-cerrar-recibo]").forEach(function (el) {
+      el.addEventListener("click", cerrarRecibo);
+    });
+
+    // Cerrar modal con Escape. Si el recibo esta abierto, cerrarlo solo a el
+    // (preservando el historial debajo cuando corresponde); si no, cerrar
+    // todos los modales como hasta ahora.
     document.addEventListener("keydown", function (ev) {
-      if (ev.key === "Escape") {
+      if (ev.key !== "Escape") {
+        return;
+      }
+      var recibo = $("#modal-recibo");
+      if (recibo && !recibo.hidden) {
+        cerrarRecibo();
+      } else {
         cerrarModales();
       }
     });
