@@ -47,7 +47,7 @@ La aplicación guarda y sincroniza los datos con **Cloud Firestore** del proyect
 La **primera vez** que alguien entra y **Firestore está vacío** (sin clientes ni movimientos), la app **siembra la nube una sola vez**:
 
 - Si ese navegador ya tenía datos en `localStorage` de la versión anterior (solo local), **sube esos** datos a Firestore.
-- Si no hay datos locales, usa los **datos de ejemplo** (`construirSeed`, los ~24 clientes de demostración) más la configuración y el tema por defecto.
+- Si no hay datos locales, usa el conjunto de arranque (`construirSeed`, los **18 clientes reales de OCTARED**; ver [Datos precargados](#datos-precargados-los-18-clientes-reales-de-octared)) más la configuración y el tema por defecto.
 
 Si Firestore **ya tiene datos**, la app **no los duplica ni los sobrescribe**: la nube es la fuente de verdad y simplemente se refleja en cada dispositivo.
 
@@ -256,20 +256,94 @@ Total Octavio = su mitad + sus pagos directos
 
 > **Importante — qué cuenta como "Ingresos del mes" en el reparto:** se basa en los **pagos cobrados de clientes**, es decir, los movimientos registrados con el botón **Pagar** de una tarjeta (`esPago = true`) cuya fecha cae en el mes seleccionado. Esto es coherente con la métrica *Pagos cobrados este mes* de las Estadísticas. Un **ingreso capturado a mano** con **Nuevo Ingreso** suma a la métrica *Ingresos* del Resumen, pero **no** entra en el reparto. Además, un pago solo se atribuye a Octavio si el movimiento quedó asociado a un cliente marcado "Octavio"; el botón **Pagar** guarda esa asociación automáticamente.
 
-## Datos de ejemplo precargados
+## Datos precargados: los 18 clientes reales de OCTARED
 
-La primera vez se cargan **24 clientes de ejemplo** basados en una tabla de referencia (nombres como *Cresencia*, *VECINA YOLANDA*, *Hermelinda*, *MICAELA HERNANDEZ*, *Lupita casa 26*, *Reyes vecino*, *TIENDA INDOMABLE*, etc.), con mezcla de tipos de pago **PTP** y **Directo**, al menos un cliente **Pausado** y varios en estado **Vencido**, además de algunos **pagados** y **próximos**. El monto predeterminado es de **$500.00**. Las direcciones e IP son genéricas de ejemplo.
+Ya **no** se cargan clientes ficticios de demostración. El conjunto de datos ahora son **exactamente los 18 clientes reales de OCTARED**, tomados de la lista del negocio (que coincide con el diagrama de red). Son estos:
 
-Estos datos sirven solo para demostrar la aplicación. Puedes editarlos, borrarlos o agregar los tuyos; todo queda guardado en tu navegador.
+*Cresencia caraos casa P4*, *VECINA YOLANDA CASA 15*, *Hermelinda*, *MICAELA HERNANDEZ CASA 54*, *casa 44 LIZBETH*, *Daniel casa 44*, *Nieto*, *Lupita casa 26 alado de nieto*, *Gabriela*, *URIEL*, *Reyes vecino*, *TIENDA INDOMABLE*, *Mercedez RH*, *Berenice*, *Jessy casa 43*, *Obed*, *VECINO DE BRANDON* y *CASA 17 CARMEN LAVANDERIA*.
 
-## Cómo reiniciar los datos
+Reglas con las que se cargan:
 
-Si quieres volver al conjunto de datos de ejemplo original:
+- **Todos quedan en estado Activo.** Ninguno arranca pausado.
+- **El único que paga directamente a Octavio es `casa 44 LIZBETH`** (socio **Octavio**); el resto paga a **Carlos**. Esto es lo que usa el [Reparto de fin de mes](#reparto-de-fin-de-mes-entre-socios).
+- **Instalación en $0** para todos (no se cobra instalación en este alta).
+- **Monto, megas y día de pago** son los reales de cada cliente (por ejemplo, *Nieto* 20 MB $600, *Reyes vecino* 30 MB $600, *Mercedez RH* 10 MB $400). El día de pago se deriva de la fecha de instalación.
+- **Estado de pago realista:** los marcados como "al corriente" o "en curso" quedan con un pago reciente y su próximo vencimiento a futuro; los que "deben" quedan como **Vencido** (vencimiento ya pasado y sin pago del ciclo).
+
+> **Decisión sobre `tipoPago` (financiero PTP/Directo):** como la lista real no trae este dato, los 18 clientes se cargan con `tipoPago = "Directo"` por defecto. Este campo es solo una **etiqueta financiera informativa** (y alimenta los chips y estadísticas de PTP/Directo); **no altera el reparto entre socios**, que depende únicamente del campo **socio** (Carlos / Octavio). Puedes cambiar el `tipoPago` de cada cliente cuando quieras desde su ficha sin que eso afecte las cuentas del reparto.
+
+Puedes editar, pausar, borrar o completar los datos de cada cliente (incluidos los [campos de red](#campos-de-red-en-la-ficha-del-cliente)); todo queda guardado en la nube y sincronizado entre dispositivos.
+
+## Cómo cargar los 18 reales si tu nube ya tenía datos de ejemplo
+
+**Importante:** la siembra automática de los 18 reales **solo ocurre si Firestore está vacío** (ver [Siembra y migración inicial](#siembra-y-migración-inicial)). Si ya habías abierto la app antes, **tu nube ya tiene los datos de ejemplo anteriores**, así que los 18 reales **no aparecen solos**. Para cargarlos:
 
 1. Abre **Configuración** (botón ⚙️ en la parte superior).
 2. Pulsa **Reiniciar datos de ejemplo** y confirma.
 
-Esto reemplaza todos los clientes y movimientos actuales por los datos de ejemplo.
+Esta acción **sobrescribe en la nube** todos los **clientes** y **movimientos** actuales con los **18 clientes reales**. Como se sincroniza con Firestore, el cambio se refleja en todos los dispositivos con la sesión abierta.
+
+> **Advertencia:** reiniciar **borra los datos previos** (los clientes y movimientos de ejemplo que hubiera) y los reemplaza por los 18 reales. Hazlo solo cuando quieras partir de ese conjunto limpio.
+
+## Campos de red en la ficha del cliente
+
+Para poder **identificar poco a poco** a cada cliente dentro de la red, la ficha del cliente (el formulario de **Nuevo / Editar cliente**) incluye estos campos de red:
+
+- **IP:** es el **mismo campo IP** que ya existía; se reutiliza como la IP del cliente dentro de la red (por ejemplo `192.168.10.38`). Un cliente **con IP** se considera **identificado**; **sin IP** queda como **pendiente** en el mapa.
+- **Tipo de conexión:** un desplegable con **AP** (cliente colgando de un AP PtMP), **PtP** (enlace punto a punto dedicado), **Modem** (modem de cable) y **"sin asignar"** (vacío, falta identificar).
+- **AP / enlace:** un desplegable para elegir el **nodo padre** del cliente dentro de la topología: **AP_OCTARED_3**, **LiteAP AC-1 (CALOSWiFi)**, **LiteAP AC-2 (CARLOSWiFi)**, **PtP MERCEDES RH** o **PtP CASA 44**.
+
+Estos tres datos **viajan dentro del propio objeto del cliente** (en la colección **`clientes`**) y se **sincronizan a Firestore** como el resto de sus campos, **sin cambios de esquema** ni colecciones nuevas. Los clientes antiguos que no tuvieran estos campos siguen funcionando: se tratan como "falta identificar" hasta que les asignes IP, tipo de conexión y AP.
+
+## Mapa de red
+
+La app incluye una vista **Mapa de red** que replica, de forma visual y **dinámica**, la estructura de la red de OCTARED. Se abre con el botón **🗺️ Red** del encabezado; es una vista **opcional (opt-in)**: al pulsarlo se alterna entre los paneles normales y el mapa, sin romper el resto de la app.
+
+### Qué muestra
+
+- **Core:** el router **MikroTik hEX S** (`192.168.10.1`), arriba del todo, en color **ámbar**.
+- **Los 3 APs PtMP**, en **azul**, cada uno con sus clientes colgando:
+  - **AP_OCTARED_3** (`192.168.10.26`, SSID **OCTARED3**).
+  - **LiteAP AC-1** (`192.168.10.20`, SSID **CALOSWiFi**).
+  - **LiteAP AC-2** (`192.168.10.21`, SSID **CARLOSWiFi**).
+- **Los 2 enlaces PtP** (punto a punto), en **teal**, como punta -> cliente dedicado:
+  - **PtP MERCEDES RH** (punta `192.168.10.25`).
+  - **PtP CASA 44** (punta `192.168.10.15`).
+- **Modems de cable** directos (`.19`, `.22`, `.24`, `.101`).
+- **Zona "Falta identificar / sin IP"** (en **naranja**) con los clientes que aún no tienen IP más los nodos pendientes por reconocer (`.61` TP-LINK y `.18`).
+
+Los conectores entre nodos (core -> AP, core -> punta PtP y padre -> cliente) se dibujan con **SVG en línea** (curvas), sin librerías externas, y se **recalculan al cambiar el tamaño** de la ventana.
+
+### Es dinámico y se cruza con los clientes reales
+
+El mapa **no es una imagen fija**: sus nodos de cliente se **derivan de los 18 clientes reales** cargados en la app. La clasificación es:
+
+- Cliente **con IP** (y su AP/enlace asignado): aparece como nodo **identificado** (**verde**) colgando de su AP o enlace.
+- Cliente **sin IP**: aparece en la zona de **pendientes** (**naranja**) como "falta identificar".
+
+Como se nutre de los datos sincronizados, el mapa se **actualiza solo** cuando cambian los clientes (incluyendo los cambios que llegan desde Firebase en otro dispositivo). En el conjunto actual quedan **8 clientes identificados** (los que ya traen IP) y **10 pendientes**.
+
+### Buscador y colores
+
+- **Buscador:** el campo de búsqueda del mapa filtra por **nombre o IP**; resalta los nodos que coinciden y atenúa el resto. Al vaciarlo se restaura todo.
+- **Semántica de colores:** **core = ámbar**, **AP = azul**, **PtP = teal**, **identificado = verde**, **pendiente = naranja**. La vista **respeta el modo oscuro** y es responsive (en pantallas estrechas el lienzo se puede desplazar en horizontal sin romper el diseño).
+
+### Abrir un nodo
+
+Cada nodo con IP **abre su dirección en una pestaña nueva**. Ten en cuenta que las IPs `192.168.10.x` son **direcciones privadas** de la red de OCTARED: **solo abren si estás dentro de esa red o conectado por VPN**. Los **modems de cable** se abren en **`http://IP:8090`** y el resto de equipos en **`https://IP`**.
+
+> Los nodos de infraestructura del diagrama que **no** son clientes de cobro (como CASA 30, LB-LINDA_S, LiteBeam 5AC, Octarednuevaultima o CASA 54) **no** se dibujan en el mapa, porque este deriva sus nodos de cliente de la lista de los 18. Podrán representarse más adelante si se agregan como clientes o como infraestructura de la topología.
+
+### Verificación manual del Mapa de red
+
+Como no hay navegador headless en el entorno de pruebas, esta comprobación se hace a mano:
+
+1. **Inicia sesión** (con Google o como invitado).
+2. **Carga los 18 reales:** abre **Configuración ⚙️** y pulsa **Reiniciar datos de ejemplo** (necesario si tu nube ya tenía datos; ver [Cómo cargar los 18 reales](#cómo-cargar-los-18-reales-si-tu-nube-ya-tenía-datos-de-ejemplo)).
+3. **Abre la vista Red** con el botón **🗺️ Red** y comprueba qué clientes salen **identificados** (bajo su AP/enlace, en verde) y cuáles están **pendientes** (en naranja).
+4. **Busca por nombre o IP** en el buscador del mapa y verifica que el nodo coincidente se **resalta** y el resto se atenúa.
+5. **Asigna una IP y un AP** a un cliente pendiente desde su ficha (Editar cliente -> IP, Tipo de conexión y AP/enlace) y guarda; al volver al mapa, ese cliente debe pasar de "falta identificar" a **identificado** bajo el AP indicado.
+6. **Sincronización:** en **otro dispositivo** con la sesión abierta, confirma que ese cliente aparece también como identificado, sin recargar.
 
 ## Persistencia (Firestore + espejo local)
 
@@ -292,14 +366,17 @@ Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp
 
 ## Qué se probó
 
-- El arnés de pruebas completa **96 comprobaciones con 0 fallos**.
-- `node --check app.js` pasa sin errores de sintaxis.
-- Carga del núcleo con un `localStorage` simulado: se siembran **24 clientes** de ejemplo; `formatoMoneda(500)` devuelve `$500.00` y `formatoFechaLarga("2026-09-29")` devuelve `29 de septiembre de 2026`.
+- El arnés de pruebas completa **132 comprobaciones con 0 fallos** (antes eran 96; las nuevas cubren los 18 clientes reales, los campos de red y la clasificación del mapa).
+- `node --check app.js` y `node --check red-mapa.js` pasan sin errores de sintaxis. `red-mapa.js` **se autoprotege cuando no hay `document`** (la lógica de DOM no se ejecuta en el arnés, solo se expone su función pura de clasificación).
+- Carga del núcleo con un `localStorage` simulado: se siembran **18 clientes reales**; `formatoMoneda(500)` devuelve `$500.00` y `formatoFechaLarga("2026-09-29")` devuelve `29 de septiembre de 2026`.
+- **Dataset de los 18 reales:** el SEED tiene **exactamente 18 clientes**, **todos Activos**, con **exactamente un** socio **Octavio** que es **`casa 44 LIZBETH`** (el resto, Carlos); los clientes sin dato de red arrancan con **campos de red vacíos** (sin IP, tipo de conexión ni AP) y `tipoPago` por defecto en **"Directo"**.
+- **Mapeos concretos de red:** se verifica que los clientes con IP quedan bajo su AP/enlace correcto (por ejemplo *Nieto* `.38`, *Lupita casa 26* `.111` y *TIENDA INDOMABLE* `.129` en AP_OCTARED_3; *Reyes vecino* `.34` y *Jessy casa 43* `.40` en LiteAP AC-1; *Berenice* `.31` en LiteAP AC-2; *Mercedez RH* `.36` en PtP MERCEDES RH; *casa 44 LIZBETH* `.145` en PtP CASA 44).
+- **Clasificación del mapa** (`window.PCC_RED.clasificarClientes`): sobre el SEED de 18 produce **8 identificados** (los que traen IP, repartidos bajo su AP/enlace) y **10 pendientes**; un cliente con IP y `apId` conocido cae como identificado, y uno sin IP o con `apId` desconocido cae en pendientes.
 - Clasificación de estados correcta sobre los datos de ejemplo (vencidos, próximos y pagados).
 - Coherencia del criterio de "vencido": un cliente **Pausado** y atrasado **no** cuenta como vencido en ningún conteo, mientras que uno **Activo** y atrasado sí (verificado en el arnés de pruebas).
 - Flujo de **Pagar**: tras registrar el pago, la fecha de próximo pago avanza al siguiente ciclo (mes siguiente respetando el día de pago).
 - `crearCliente` normaliza y autocalcula la fecha de próximo pago para un cliente nuevo.
-- **Campo socio**: `crearCliente` asigna **Carlos** por defecto, respeta **Octavio** cuando se indica y normaliza cualquier valor inválido a Carlos; el conjunto de datos de ejemplo tiene **exactamente un** cliente marcado "Octavio" (monto $500) y el resto en Carlos.
+- **Campo socio**: `crearCliente` asigna **Carlos** por defecto, respeta **Octavio** cuando se indica y normaliza cualquier valor inválido a Carlos; el conjunto de los 18 reales tiene **exactamente un** cliente marcado "Octavio" (**`casa 44 LIZBETH`**) y el resto en Carlos.
 - **Migración de configuración**: una `pcc.config` antigua `{diasAviso, moneda}` migra añadiendo los gastos fijos con sus defaults (`costoAntena: 1305`, `numAntenas: 2`, `costoLuz: 300`, `luzPeriodicidadMeses: 2`, `luzMesAncla: "2025-11"`).
 - **Patrón de la luz** (`luzAplicaEnMes`): aplica en noviembre 2025 y enero 2026, y no aplica en diciembre 2025 ni febrero 2026.
 - **Gastos fijos del mes** (`gastosFijosDelMes`): total **$2,910** en noviembre (Starlink $2,610 + luz $300) y **$2,610** en diciembre (sin luz).
