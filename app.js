@@ -288,14 +288,52 @@
   var TOPOLOGIA = {
     core: { id: RED_IDS.CORE, nombre: "MikroTik hEX S", ip: "192.168.10.1", tipo: "core" },
     aps: [
-      { id: RED_IDS.AP_OCTARED_3, nombre: "AP OCTARED3", ip: "192.168.10.26", ssid: "OCTARED3", frecuencia: "5105 MHz", tipo: "AP" },
-      { id: RED_IDS.LITEAP_AC1, nombre: "LiteAP AC-1", ip: "192.168.10.20", ssid: "CALOSWiFi", frecuencia: "5230 MHz", tipo: "AP" },
-      { id: RED_IDS.LITEAP_AC2, nombre: "LiteAP AC-2", ip: "192.168.10.21", ssid: "CARLOSWiFi", frecuencia: "5135 MHz", tipo: "AP" }
+      {
+        id: RED_IDS.AP_OCTARED_3, nombre: "AP OCTARED3", ip: "192.168.10.26",
+        ssid: "OCTARED3", frecuencia: "5105 MHz", tipo: "AP",
+        // Antenas FIJAS de infraestructura del AP (nombre + IP). Las que
+        // tambien son clientes de cobro reales (Lupita casa 26, Tienda
+        // Indomable, NIETO) salen de los clientes de Firebase y se fusionan
+        // por IP (ver fusionarAntenas en red-mapa.js) para no duplicar.
+        antenas: [
+          { nombre: "Lupita casa 26", ip: "192.168.10.111" },
+          { nombre: "CASA 30", ip: "192.168.10.100" },
+          { nombre: "LB-LINDA_S", ip: "192.168.10.37" },
+          { nombre: "NIETO (cámaras, modem .99)", ip: "192.168.10.38" },
+          { nombre: "LiteBeam 5AC", ip: "192.168.10.49" },
+          { nombre: "Tienda Indomable", ip: "192.168.10.129" }
+        ]
+      },
+      {
+        id: RED_IDS.LITEAP_AC1, nombre: "LiteAP AC-1", ip: "192.168.10.20",
+        ssid: "CALOSWiFi", frecuencia: "5230 MHz", tipo: "AP",
+        antenas: [
+          { nombre: "Jessy casa 43", ip: "192.168.10.40" },
+          { nombre: "Reyes vecino", ip: "192.168.10.34" },
+          { nombre: "Octarednuevaultima", ip: "192.168.10.72" }
+        ]
+      },
+      {
+        id: RED_IDS.LITEAP_AC2, nombre: "LiteAP AC-2", ip: "192.168.10.21",
+        ssid: "CARLOSWiFi", frecuencia: "5135 MHz", tipo: "AP",
+        antenas: [
+          { nombre: "Berenice", ip: "192.168.10.31" },
+          { nombre: "CASA 54", ip: "192.168.10.134" }
+        ]
+      }
     ],
-    // Puntas de los enlaces PtP dedicados (1 a 1 con su cliente).
+    // Puntas de los enlaces PtP dedicados (1 a 1 con su cliente). 'antenas'
+    // lista el cliente dedicado esperado como fila fija (se fusiona por IP
+    // con el cliente real de Firebase si existe).
     puntas: [
-      { id: RED_IDS.PTP_MERCEDES_RH, nombre: "PtP Mercedes RH", ip: "192.168.10.25", tipo: "PtP" },
-      { id: RED_IDS.PTP_CASA_44, nombre: "PtP Casa 44", ip: "192.168.10.15", tipo: "PtP" }
+      {
+        id: RED_IDS.PTP_MERCEDES_RH, nombre: "PtP Mercedes RH", ip: "192.168.10.25", tipo: "PtP",
+        antenas: [{ nombre: "Mercedez RH", ip: "192.168.10.36" }]
+      },
+      {
+        id: RED_IDS.PTP_CASA_44, nombre: "PtP Casa 44", ip: "192.168.10.15", tipo: "PtP",
+        antenas: [{ nombre: "casa 44 LIZBETH", ip: "192.168.10.145" }]
+      }
     ],
     // Modems directos por cable (acceso http://IP:8090). No son clientes de cobro.
     modems: ["192.168.10.19", "192.168.10.22", "192.168.10.24", "192.168.10.101"],

@@ -1318,15 +1318,14 @@ body {
   position: relative;
   width: 100%;
   min-height: 320px;
-  overflow-x: auto;
-  padding: 8px 4px 12px;
+  padding: 10px 6px 16px;
   border-radius: var(--radio-sm);
   background:
     radial-gradient(circle at 1px 1px, var(--borde) 1px, transparent 0) 0 0 / 22px 22px,
     var(--superficie-2);
 }
 
-/* SVG de conectores: detras de los nodos, no intercepta clics. */
+/* SVG de conectores: DETRAS de las tarjetas, no intercepta clics. */
 .red-conectores {
   position: absolute;
   inset: 0;
@@ -1338,170 +1337,299 @@ body {
 
 .red-conector {
   fill: none;
-  stroke: var(--red-conector);
   stroke-width: 2;
-  opacity: 0.65;
+  opacity: 0.5;
 }
 
-/* Capa de nodos encima del SVG. */
+/* Enlaces INALAMBRICOS (simulan microondas): punteados y animados. */
+.red-conector--ap {
+  stroke: var(--red-ap);
+  stroke-dasharray: 6 7;
+  animation: red-ondas 1s linear infinite;
+}
+.red-conector--ptp {
+  stroke: var(--red-ptp);
+  stroke-dasharray: 6 7;
+  animation: red-ondas 1s linear infinite;
+}
+/* Enlace por CABLE: linea SOLIDA continua (color neutro). */
+.red-conector--cable {
+  stroke: var(--red-identificado);
+  stroke-dasharray: none;
+  opacity: 0.6;
+}
+
+@keyframes red-ondas {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .red-conector--ap,
+  .red-conector--ptp {
+    animation: none;
+  }
+}
+
+/* Capa de contenido encima del SVG. */
 .red-capa {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  min-width: max-content;
+  gap: 10px;
 }
 
-.red-fila {
+/* ---------------------- Titulos de seccion ---------------- */
+.red-titulo-seccion {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--texto);
+  margin: 14px 0 2px;
+}
+
+/* ---------------------- Core (centrado arriba) ------------ */
+.red-seccion--core {
   display: flex;
   justify-content: center;
-  gap: 28px;
-  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
-.red-fila--aps,
-.red-fila--ptp {
-  align-items: flex-start;
-}
-
-.red-columna {
-  display: flex;
-  flex-direction: column;
+.red-core {
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
-}
-
-.red-hijos {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: center;
-}
-
-/* ---------------------- Bloques (modems / pendientes) ----- */
-.red-bloque {
-  position: relative;
-  z-index: 1;
-  border: 1px dashed var(--borde-fuerte);
+  gap: 12px;
+  padding: 12px 18px;
+  border: 1px solid var(--red-core);
   border-radius: var(--radio-sm);
-  padding: 12px 14px;
+  background: var(--superficie);
+  background: color-mix(in srgb, var(--red-core) 14%, var(--superficie));
+  box-shadow: var(--sombra);
+  cursor: default;
+  text-align: left;
 }
 
-.red-bloque--pendientes {
-  border-color: var(--red-pendiente);
+.red-core__icono {
+  font-size: 1.4rem;
 }
 
-.red-bloque__titulo {
-  font-size: 0.85rem;
+.red-core__texto {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.red-core__titulo {
+  font-size: 0.95rem;
   font-weight: 700;
-  margin-bottom: 10px;
+}
+
+.red-core__sub {
+  font-size: 0.72rem;
   color: var(--texto-suave);
 }
 
-.red-grid {
+.red-core__ip {
+  font-size: 0.78rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color: var(--texto-suave);
+}
+
+/* ---------------------- Grilla de tarjetas ---------------- */
+/* En pantalla ancha: fila de tarjetas (p.ej. 3 APs). En movil: 1 columna. */
+.red-grid-tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+/* ---------------------- Tarjeta (AP / PtP / modem / pend.) - */
+.red-tarjeta {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+  overflow: hidden;
+}
+
+.red-tarjeta__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  color: #fff;
+}
+
+.red-tarjeta__cabecera--ap {
+  background: var(--red-ap);
+}
+.red-tarjeta__cabecera--ptp {
+  background: var(--red-ptp);
+}
+.red-tarjeta__cabecera--modem {
+  background: var(--texto-suave);
+}
+.red-tarjeta__cabecera--pendiente {
+  background: var(--red-pendiente);
+}
+
+.red-tarjeta__cabtexto {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.red-tarjeta__nombre {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.red-tarjeta__sub {
+  font-size: 0.72rem;
+  opacity: 0.92;
+}
+
+.red-tarjeta__ip {
+  font-size: 0.78rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  opacity: 0.95;
+}
+
+.red-tarjeta__cuerpo {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------------- Fila dentro de la tarjeta --------- */
+.red-fila-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px 8px 10px;
+  border: 0;
+  border-top: 1px solid var(--borde);
+  border-left: 4px solid transparent;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, opacity 0.15s ease;
+}
+
+.red-tarjeta__cuerpo .red-fila-item:first-child {
+  border-top: 0;
+}
+
+.red-fila-item:hover {
+  background: var(--superficie-2);
+}
+
+.red-fila-item:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: -2px;
+}
+
+/* Punto de estado a la izquierda. */
+.red-fila-item__estado {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--texto-suave);
+}
+
+/* Nombre a la izquierda (ocupa el espacio disponible). */
+.red-fila-item__nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* IP alineada a la DERECHA (p.ej. ".111"). */
+.red-fila-item__ip {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color: var(--texto-suave);
+}
+
+.red-fila-item__ip--vacia {
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Barra lateral + punto por estado de la fila. */
+.red-fila-item--identificado {
+  border-left-color: var(--red-identificado);
+}
+.red-fila-item--identificado .red-fila-item__estado {
+  background: var(--red-identificado);
+}
+.red-fila-item--infra {
+  border-left-color: var(--red-ap);
+}
+.red-fila-item--infra .red-fila-item__estado {
+  background: var(--red-ap);
+}
+.red-fila-item--pendiente {
+  border-left-color: var(--red-pendiente);
+}
+.red-fila-item--pendiente .red-fila-item__estado {
+  background: var(--red-pendiente);
+}
+.red-fila-item--modem {
+  border-left-color: var(--texto-suave);
+}
+.red-fila-item--modem .red-fila-item__estado {
+  background: var(--texto-suave);
+}
+
+/* ---------------------- Lista informativa sin IP ---------- */
+.red-lista-sinip {
+  list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.red-lista-sinip__item {
+  font-size: 0.8rem;
+  color: var(--red-pendiente);
+  background: var(--superficie);
+  border: 1px solid var(--red-pendiente);
+  border-radius: 999px;
+  padding: 3px 10px;
 }
 
 .red-vacio {
   font-size: 0.8rem;
   color: var(--texto-suave);
   font-style: italic;
+  padding: 10px 14px;
 }
 
-/* ---------------------- Nodos ----------------------------- */
-.red-nodo {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 128px;
-  max-width: 190px;
-  padding: 9px 12px;
-  border: 1px solid var(--borde-fuerte);
-  border-left: 4px solid var(--borde-fuerte);
-  border-radius: var(--radio-sm);
-  background: var(--superficie);
-  color: var(--texto);
-  font: inherit;
-  cursor: pointer;
-  text-align: center;
-  transition: transform 0.08s ease, box-shadow 0.15s ease, opacity 0.15s ease,
-    border-color 0.15s ease;
-  box-shadow: var(--sombra);
+/* ---------------------- Estados del buscador -------------- */
+.red-match {
+  box-shadow: 0 0 0 2px var(--acento-suave) inset;
 }
-
-.red-nodo:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.14);
+.red-fila-item.red-match {
+  background: var(--acento-suave);
 }
-
-.red-nodo:focus-visible {
-  outline: 2px solid var(--acento);
-  outline-offset: 2px;
-}
-
-.red-nodo__titulo {
-  font-size: 0.85rem;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.red-nodo__sub {
-  font-size: 0.72rem;
-  color: var(--texto-suave);
-}
-
-.red-nodo__ip {
-  font-size: 0.74rem;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  color: var(--texto-suave);
-}
-
-.red-nodo__ip--vacia {
-  font-style: italic;
-}
-
-/* Variantes de color (borde izquierdo + chip de color de fondo suave). */
-/* Nota: el tinte de fondo usa color-mix. Se declara primero un color solido
-   (var(--superficie)) como fallback: los navegadores sin soporte de color-mix
-   ignoran la regla invalida y conservan el fondo solido; el borde izquierdo
-   de color ya distingue cada tipo de nodo. */
-.red-nodo--core {
-  border-left-color: var(--red-core);
-  background: var(--superficie);
-  background: color-mix(in srgb, var(--red-core) 12%, var(--superficie));
-}
-.red-nodo--ap {
-  border-left-color: var(--red-ap);
-  background: var(--superficie);
-  background: color-mix(in srgb, var(--red-ap) 10%, var(--superficie));
-}
-.red-nodo--ptp {
-  border-left-color: var(--red-ptp);
-  background: var(--superficie);
-  background: color-mix(in srgb, var(--red-ptp) 10%, var(--superficie));
-}
-.red-nodo--identificado {
-  border-left-color: var(--red-identificado);
-}
-.red-nodo--pendiente {
-  border-left-color: var(--red-pendiente);
-  background: var(--superficie);
-  background: color-mix(in srgb, var(--red-pendiente) 10%, var(--superficie));
-}
-.red-nodo--modem {
-  border-left-color: var(--texto-suave);
-}
-
-/* Estados del buscador. */
-.red-nodo--match {
-  border-color: var(--acento);
-  box-shadow: 0 0 0 2px var(--acento-suave);
-}
-.red-nodo--dim {
+.red-dim {
   opacity: 0.3;
 }
 
@@ -1573,8 +1701,8 @@ body {
     overflow-x: auto;
   }
 
-  /* Mapa de red: el lienzo mantiene su ancho minimo y permite scroll
-     horizontal sin romper el layout de la app. */
+  /* Mapa de red: en movil las tarjetas se apilan a UNA columna y las filas
+     internas siguen legibles con la IP a la derecha. */
   .panel__cabecera--red {
     flex-direction: column;
     align-items: stretch;
@@ -1584,8 +1712,12 @@ body {
     max-width: 100%;
   }
 
-  .red-fila {
-    gap: 18px;
+  .red-grid-tarjetas {
+    grid-template-columns: 1fr;
+  }
+
+  .red-core {
+    width: 100%;
   }
 
   .modal {

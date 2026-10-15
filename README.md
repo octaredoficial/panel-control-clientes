@@ -299,20 +299,37 @@ Estos tres datos **viajan dentro del propio objeto del cliente** (en la colecci�
 
 La app incluye una vista **Mapa de red** que replica, de forma visual y **dinámica**, la estructura de la red de OCTARED. Se abre con el botón **🗺️ Red** del encabezado; es una vista **opcional (opt-in)**: al pulsarlo se alterna entre los paneles normales y el mapa, sin romper el resto de la app.
 
-### Qué muestra
+### Diseño: listas apiladas verticales
 
-- **Core:** el router **MikroTik hEX S** (`192.168.10.1`), arriba del todo, en color **ámbar**.
-- **Los 3 APs PtMP**, en **azul**, cada uno con sus clientes colgando:
-  - **AP_OCTARED_3** (`192.168.10.26`, SSID **OCTARED3**).
-  - **LiteAP AC-1** (`192.168.10.20`, SSID **CALOSWiFi**).
-  - **LiteAP AC-2** (`192.168.10.21`, SSID **CARLOSWiFi**).
-- **Los 2 enlaces PtP** (punto a punto), en **teal**, como punta -> cliente dedicado:
-  - **PtP MERCEDES RH** (punta `192.168.10.25`).
-  - **PtP CASA 44** (punta `192.168.10.15`).
-- **Modems de cable** directos (`.19`, `.22`, `.24`, `.101`).
-- **Zona "Falta identificar / sin IP"** (en **naranja**) con los clientes que aún no tienen IP más los nodos pendientes por reconocer (`.61` TP-LINK y `.18`).
+El mapa usa un diseño de **listas apiladas** (de arriba a abajo), no columnas sueltas. Cada AP o enlace es una **tarjeta ancha** con una **cabecera de color** (nombre + SSID + MHz + IP) y, **dentro de la misma tarjeta**, sus antenas o clientes como **filas**: cada fila muestra un **punto de estado** (verde = identificado, naranja = pendiente, azul = infraestructura), el **nombre a la izquierda** y la **IP alineada a la derecha** (por ejemplo `.111`, con la IP completa en el tooltip).
 
-Los conectores entre nodos (core -> AP, core -> punta PtP y padre -> cliente) se dibujan con **SVG en línea** (curvas), sin librerías externas, y se **recalculan al cambiar el tamaño** de la ventana.
+### Qué muestra (de arriba a abajo)
+
+- **Leyenda** de colores (identificado, falta identificar, AP/infraestructura, etc.).
+- **Core:** el router **MikroTik hEX S** (`192.168.10.1`), centrado arriba, en color **ámbar**.
+- **APs Multipunto (PtMP) y sus antenas**, en **azul**. Cada AP lista **todas** sus antenas como filas (infraestructura y clientes juntos):
+  - **AP OCTARED3** (`192.168.10.26`, SSID **OCTARED3**, 5105 MHz) con sus **6 antenas**: Lupita casa 26 `.111`, CASA 30 `.100`, LB-LINDA_S `.37`, NIETO `.38`, LiteBeam 5AC `.49`, Tienda Indomable `.129`.
+  - **LiteAP AC-1** (`192.168.10.20`, SSID **CALOSWiFi**, 5230 MHz) con **3**: Jessy casa 43 `.40`, Reyes vecino `.34`, Octarednuevaultima `.72`.
+  - **LiteAP AC-2** (`192.168.10.21`, SSID **CARLOSWiFi**, 5135 MHz) con **2**: Berenice `.31`, CASA 54 `.134`.
+- **Enlaces Punto a Punto (PtP)**, en **teal**, cada punta con su cliente dedicado como fila:
+  - **PtP MERCEDES RH** (punta `192.168.10.25`) -> Mercedez RH `.36`.
+  - **PtP CASA 44** (punta `192.168.10.15`) -> casa 44 LIZBETH `.145`.
+- **Clientes directos por cable (modem)** (`.19`, `.22`, `.24`, `.101`), que abren en `http://IP:8090`.
+- **Pendientes / Falta identificar** (en **naranja**): nodos de infraestructura pendientes (`.61` TP-LINK, `.18`) y los clientes que aún no tienen IP.
+- **En tu lista de cobro, SIN IP aún:** lista informativa con los nombres de los clientes sin IP.
+
+### Conexiones: microondas (inalámbrico) vs cable
+
+Las conexiones se dibujan **al final, por detrás de las tarjetas**, con un **SVG en línea** (sin librerías externas), para no estorbar la lectura:
+
+- **Enlaces inalámbricos (simulan microondas):** Core -> cada AP, Core -> cada punta PtP y cada AP/punta -> sus antenas o cliente. Se dibujan con **línea punteada animada** (efecto de "ondas" en movimiento), **azul** para los AP y **teal** para los PtP.
+- **Conexiones por cable:** Core -> cada **modem** directo, con **línea sólida continua** (simula el cable físico), en color verde/identificado.
+
+Las líneas se **recalculan** al cambiar el tamaño de la ventana y cada vez que se redibuja el mapa (incluidos los datos que llegan de Firebase). La animación de ondas se desactiva si el sistema pide **movimiento reducido** (`prefers-reduced-motion`).
+
+### Antenas fijas de infraestructura + clientes reales (sin duplicar)
+
+Cada AP/enlace trae en la **topología** una lista de **antenas fijas** (nombre + IP). Al dibujar, el mapa **fusiona** esas antenas fijas con los **clientes reales** clasificados bajo ese AP, **deduplicando por IP**: si una antena fija coincide con un cliente real (misma IP), la fila se marca como **identificada** y toma el nombre del cliente; si no, se muestra como fila de **infraestructura**. Así aparecen también los nodos que no son clientes de cobro (CASA 30, LB-LINDA_S, LiteBeam 5AC, Octarednuevaultima, CASA 54) sin repetir a los clientes reales.
 
 ### Es dinámico y se cruza con los clientes reales
 
@@ -326,13 +343,13 @@ Como se nutre de los datos sincronizados, el mapa se **actualiza solo** cuando c
 ### Buscador y colores
 
 - **Buscador:** el campo de búsqueda del mapa filtra por **nombre o IP**; resalta los nodos que coinciden y atenúa el resto. Al vaciarlo se restaura todo.
-- **Semántica de colores:** **core = ámbar**, **AP = azul**, **PtP = teal**, **identificado = verde**, **pendiente = naranja**. La vista **respeta el modo oscuro** y es responsive (en pantallas estrechas el lienzo se puede desplazar en horizontal sin romper el diseño).
+- **Semántica de colores:** **core = ámbar**, **AP = azul**, **PtP = teal**, **identificado = verde**, **pendiente = naranja**. La vista **respeta el modo oscuro** y es **responsive**: en **PC** las tarjetas de AP se muestran en **fila/grilla** y en **móvil** se **apilan a una columna**, con las filas internas legibles y la IP a la derecha sin romperse. Las líneas SVG se recalculan para ambos tamaños.
 
 ### Abrir un nodo
 
 Cada nodo con IP **abre su dirección en una pestaña nueva**. Ten en cuenta que las IPs `192.168.10.x` son **direcciones privadas** de la red de OCTARED: **solo abren si estás dentro de esa red o conectado por VPN**. Los **modems de cable** se abren en **`http://IP:8090`** y el resto de equipos en **`https://IP`**.
 
-> Los nodos de infraestructura del diagrama que **no** son clientes de cobro (como CASA 30, LB-LINDA_S, LiteBeam 5AC, Octarednuevaultima o CASA 54) **no** se dibujan en el mapa, porque este deriva sus nodos de cliente de la lista de los 18. Podrán representarse más adelante si se agregan como clientes o como infraestructura de la topología.
+> Los nodos de infraestructura del diagrama que **no** son clientes de cobro (como CASA 30, LB-LINDA_S, LiteBeam 5AC, Octarednuevaultima o CASA 54) **sí** se muestran ahora como una **fila fija** dentro de su AP (definidos en la topología). Los clientes de cobro siguen derivándose de la lista real de Firebase y se fusionan con esas antenas fijas por IP para no duplicarlos.
 
 ### Verificación manual del Mapa de red
 
@@ -340,7 +357,7 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 
 1. **Inicia sesión** (con Google o como invitado).
 2. **Carga los 18 reales:** abre **Configuración ⚙️** y pulsa **Reiniciar datos de ejemplo** (necesario si tu nube ya tenía datos; ver [Cómo cargar los 18 reales](#cómo-cargar-los-18-reales-si-tu-nube-ya-tenía-datos-de-ejemplo)).
-3. **Abre la vista Red** con el botón **🗺️ Red** y comprueba qué clientes salen **identificados** (bajo su AP/enlace, en verde) y cuáles están **pendientes** (en naranja).
+3. **Abre la vista Red** con el botón **🗺️ Red** (pruébala en **PC** y en **móvil**) y comprueba: que **AP OCTARED3** lista sus **6 antenas**; qué clientes salen **identificados** (en verde) y cuáles **pendientes** (en naranja); y que las líneas **Core -> AP** son **punteadas** (microondas) mientras que **Core -> modem** son **sólidas** (cable).
 4. **Busca por nombre o IP** en el buscador del mapa y verifica que el nodo coincidente se **resalta** y el resto se atenúa.
 5. **Asigna una IP y un AP** a un cliente pendiente desde su ficha (Editar cliente -> IP, Tipo de conexión y AP/enlace) y guarda; al volver al mapa, ese cliente debe pasar de "falta identificar" a **identificado** bajo el AP indicado.
 6. **Sincronización:** en **otro dispositivo** con la sesión abierta, confirma que ese cliente aparece también como identificado, sin recargar.
@@ -366,12 +383,13 @@ Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp
 
 ## Qué se probó
 
-- El arnés de pruebas completa **132 comprobaciones con 0 fallos** (antes eran 96; las nuevas cubren los 18 clientes reales, los campos de red y la clasificación del mapa).
+- El arnés de pruebas completa **141 comprobaciones con 0 fallos** (las nuevas cubren los 18 clientes reales, los campos de red, la clasificación del mapa y la fusión de antenas fijas con clientes reales).
 - `node --check app.js` y `node --check red-mapa.js` pasan sin errores de sintaxis. `red-mapa.js` **se autoprotege cuando no hay `document`** (la lógica de DOM no se ejecuta en el arnés, solo se expone su función pura de clasificación).
 - Carga del núcleo con un `localStorage` simulado: se siembran **18 clientes reales**; `formatoMoneda(500)` devuelve `$500.00` y `formatoFechaLarga("2026-09-29")` devuelve `29 de septiembre de 2026`.
 - **Dataset de los 18 reales:** el SEED tiene **exactamente 18 clientes**, **todos Activos**, con **exactamente un** socio **Octavio** que es **`casa 44 LIZBETH`** (el resto, Carlos); los clientes sin dato de red arrancan con **campos de red vacíos** (sin IP, tipo de conexión ni AP) y `tipoPago` por defecto en **"Directo"**.
 - **Mapeos concretos de red:** se verifica que los clientes con IP quedan bajo su AP/enlace correcto (por ejemplo *Nieto* `.38`, *Lupita casa 26* `.111` y *TIENDA INDOMABLE* `.129` en AP_OCTARED_3; *Reyes vecino* `.34` y *Jessy casa 43* `.40` en LiteAP AC-1; *Berenice* `.31` en LiteAP AC-2; *Mercedez RH* `.36` en PtP MERCEDES RH; *casa 44 LIZBETH* `.145` en PtP CASA 44).
 - **Clasificación del mapa** (`window.PCC_RED.clasificarClientes`): sobre el SEED de 18 produce **8 identificados** (los que traen IP, repartidos bajo su AP/enlace) y **10 pendientes**; un cliente con IP y `apId` conocido cae como identificado, y uno sin IP o con `apId` desconocido cae en pendientes.
+- **Fusión de antenas fijas y clientes** (`window.PCC_RED.fusionarAntenas`): AP OCTARED3 lista sus **6 antenas fijas** de la topología; sin clientes reales todas son filas de infraestructura; con un cliente real cuya IP coincide con una antena (`.111`) la fila pasa a **identificada** y toma el nombre del cliente **sin duplicar**, y un cliente con IP nueva se agrega como fila extra identificada.
 - Clasificación de estados correcta sobre los datos de ejemplo (vencidos, próximos y pagados).
 - Coherencia del criterio de "vencido": un cliente **Pausado** y atrasado **no** cuenta como vencido en ningún conteo, mientras que uno **Activo** y atrasado sí (verificado en el arnés de pruebas).
 - Flujo de **Pagar**: tras registrar el pago, la fecha de próximo pago avanza al siguiente ciclo (mes siguiente respetando el día de pago).

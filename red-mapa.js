@@ -1,30 +1,36 @@
 /* ============================================================
-   red-mapa.js  (FEAT-003 / TAREA B)
+   red-mapa.js  (Vista "Mapa de red" - WISP OCTARED)
    ------------------------------------------------------------
-   Vista "Mapa de red" integrada en la app (Opcion A). Replica la
-   estructura del diagrama de la red WISP OCTARED:
-     - Core MikroTik hEX S (ambar) arriba.
-     - Fila de 3 APs PtMP (azul) con sus clientes identificados (verde)
-       colgando.
-     - 2 enlaces PtP (teal) punta -> cliente dedicado.
-     - Modems de cable (abren http://IP:8090).
-     - Zona "Falta identificar / sin IP" (naranja) con los clientes sin
-       IP mas los nodos pendientes (.61 TP-LINK, .18).
+   Replica el diagrama de la red como LISTAS APILADAS verticales:
+     - Leyenda (identificado / falta identificar / AP-infraestructura).
+     - Nodo CORE (MikroTik hEX S) centrado arriba.
+     - "APs Multipunto (PtMP) y sus antenas": cada AP es una tarjeta
+       ancha con cabecera azul (nombre + SSID + MHz + IP) y, debajo,
+       dentro de la MISMA tarjeta, sus antenas como FILAS (punto de
+       estado + nombre a la izquierda + IP a la derecha).
+     - "Enlaces Punto a Punto (PtP)": tarjetas con cabecera teal y su
+       cliente dedicado como fila.
+     - "Clientes directos por cable (modem)": filas que abren http://IP:8090.
+     - "Pendientes / Falta identificar": nodos de infraestructura
+       pendientes (.61 TP-LINK, .18) y clientes sin IP (naranja).
+     - "En tu lista de cobro, SIN IP aun": lista informativa de nombres.
 
-   La INFRAESTRUCTURA (core, APs, puntas, modems, pendientes) viene de
-   window.PCC.TOPOLOGIA (expuesta por el nucleo en FEAT-002). Los CLIENTES
-   se derivan de window.PCC.cargarClientes(): con IP + apId conocido ->
-   nodo identificado bajo su AP/enlace; sin IP o sin apId -> pendientes.
+   CONEXIONES (se dibujan AL FINAL, detras de las tarjetas, en el SVG):
+     - INALAMBRICAS (simulan microondas): Core->cada AP, Core->cada punta
+       PtP y padre->sus antenas/clientes. Linea PUNTEADA con animacion de
+       "ondas" (stroke-dashoffset), azul para AP, teal para PtP.
+     - CABLE: Core->cada modem con linea SOLIDA continua (color neutro).
 
-   DISENO IMPORTANTE (para el arnes de pruebas sin DOM):
-     - La logica PURA de clasificacion (clasificarClientes) se define y se
+   La INFRAESTRUCTURA viene de window.PCC.TOPOLOGIA; cada AP/punta trae
+   su lista de antenas FIJAS (nombre + ip). Los CLIENTES de cobro vienen
+   de window.PCC.cargarClientes(): con ip + apId conocido se clasifican
+   bajo su padre y se FUSIONAN por IP con las antenas fijas (sin duplicar).
+
+   DISENO para el arnes (sin DOM):
+     - La logica PURA (clasificarClientes y fusionarAntenas) se define y se
        expone en window.PCC_RED SIN tocar el DOM, aunque no exista
-       'document'. Asi el arnes la puede probar.
-     - Todo el codigo que toca el DOM queda despues de un guard
-       'if (typeof document === "undefined") return;'.
-
-   Lee window.PCC de forma PEREZOSA (dentro de funciones / tras
-   DOMContentLoaded), nunca en tiempo de carga del modulo.
+       'document'. Todo lo que toca el DOM queda tras el guard.
+   Lee window.PCC de forma PEREZOSA (dentro de funciones).
    ============================================================ */
 (function () {
   "use strict";
@@ -33,17 +39,18 @@
      1. Logica PURA (sin DOM) - testeable por el arnes
      ---------------------------------------------------------- */
 
+  function _ip(v) {
+    return (v == null ? "" : String(v)).trim();
+  }
+
   /**
-   * clasificarClientes: cruza la lista de clientes con la topologia de red
-   * y devuelve, por cada AP/enlace, sus clientes "identificados" (con IP y
+   * clasificarClientes: cruza la lista de clientes con la topologia y
+   * devuelve, por cada AP/enlace, sus clientes "identificados" (con IP y
    * apId que apunta a ese padre) y una lista global de "pendientes"
-   * (clientes sin IP o sin apId reconocible).
+   * (clientes sin IP o sin apId reconocible). No toca el DOM.
    *
-   * No toca el DOM. Es la pieza central del mapa y la unica que prueba el
-   * arnes.
-   *
-   * @param {Array<Object>} clientes  lista de clientes (window.PCC.cargarClientes())
-   * @param {Object} topologia        window.PCC.TOPOLOGIA
+   * @param {Array<Object>} clientes
+   * @param {Object} topologia  window.PCC.TOPOLOGIA
    * @returns {{ padres: Array, identificados: Array, pendientes: Array, porApId: Object }}
    */
   function clasificarClientes(clientes, topologia) {
@@ -53,7 +60,6 @@
     var aps = Array.isArray(topologia.aps) ? topologia.aps : [];
     var puntas = Array.isArray(topologia.puntas) ? topologia.puntas : [];
 
-    // Lista ordenada de padres validos (APs primero, luego puntas PtP).
     var padres = aps.concat(puntas).map(function (p) {
       return {
         id: p.id,
@@ -76,9 +82,8 @@
       if (!c) {
         return;
       }
-      var ip = (c.ip || "").trim();
-      var apId = (c.apId || "").trim();
-      // Identificado: tiene IP y un apId que corresponde a un padre conocido.
+      var ip = _ip(c.ip);
+      var apId = _ip(c.apId);
       if (ip && apId && porApId[apId]) {
         porApId[apId].clientes.push(c);
         identificados.push(c);
@@ -95,24 +100,97 @@
     };
   }
 
-  // Exponer la logica pura SIN requerir document (para el arnes y para
-  // reutilizarla desde el render del DOM mas abajo).
+  /**
+   * fusionarAntenas: combina las antenas FIJAS de un padre (infraestructura
+   * declarada en la topologia) con los CLIENTES reales clasificados bajo
+   * ese padre, DEDUPLICANDO por IP. Devuelve una lista ordenada de filas
+   * listas para pintar, sin tocar el DOM.
+   *
+   * Cada fila: { nombre, ip, estado: 'identificado'|'infra', cliente|null }.
+   *   - Si una antena fija coincide por IP con un cliente real, la fila es
+   *     'identificado' y lleva el cliente (prioriza el nombre del cliente).
+   *   - Antena fija sin cliente real => 'infra' (fila de pura infraestructura).
+   *   - Cliente real cuyo IP no esta en las antenas fijas => se agrega al
+   *     final como 'identificado'.
+   *
+   * @param {Object} padre     objeto de topologia (aps[]|puntas[]) con .antenas
+   * @param {Array<Object>} clientes  clientes ya clasificados bajo ese padre
+   * @returns {Array<Object>} filas
+   */
+  function fusionarAntenas(padre, clientes) {
+    padre = padre || {};
+    clientes = Array.isArray(clientes) ? clientes : [];
+
+    var antenas = Array.isArray(padre.antenas) ? padre.antenas : [];
+    var porIp = {};
+    clientes.forEach(function (c) {
+      var ip = _ip(c && c.ip);
+      if (ip) {
+        porIp[ip] = c;
+      }
+    });
+
+    var filas = [];
+    var usados = {};
+
+    antenas.forEach(function (a) {
+      var ip = _ip(a.ip);
+      var cliente = ip ? porIp[ip] : null;
+      if (cliente) {
+        usados[ip] = true;
+        filas.push({
+          nombre: cliente.nombre || a.nombre || "",
+          ip: ip,
+          estado: "identificado",
+          cliente: cliente
+        });
+      } else {
+        filas.push({
+          nombre: a.nombre || "",
+          ip: ip,
+          estado: "infra",
+          cliente: null
+        });
+      }
+    });
+
+    // Clientes reales bajo el padre que no coinciden con ninguna antena fija.
+    clientes.forEach(function (c) {
+      var ip = _ip(c && c.ip);
+      if (ip && usados[ip]) {
+        return;
+      }
+      filas.push({
+        nombre: (c && c.nombre) || "",
+        ip: ip,
+        estado: "identificado",
+        cliente: c
+      });
+    });
+
+    return filas;
+  }
+
+  // Exponer la logica pura SIN requerir document (para el arnes).
   if (typeof window !== "undefined") {
     window.PCC_RED = window.PCC_RED || {};
     window.PCC_RED.clasificarClientes = clasificarClientes;
+    window.PCC_RED.fusionarAntenas = fusionarAntenas;
   } else if (typeof globalThis !== "undefined") {
     globalThis.PCC_RED = globalThis.PCC_RED || {};
     globalThis.PCC_RED.clasificarClientes = clasificarClientes;
+    globalThis.PCC_RED.fusionarAntenas = fusionarAntenas;
   }
 
   /* ----------------------------------------------------------
      2. A partir de aqui todo toca el DOM: autoprotegerse.
      ---------------------------------------------------------- */
   if (typeof window === "undefined" || typeof document === "undefined") {
-    return; // Entorno sin DOM (node --check / arnes): no ejecutar nada de UI.
+    return; // Entorno sin DOM (node --check / arnes): no ejecutar UI.
   }
 
   var MODEM_PUERTO = ":8090";
+  var SVG_NS = "http://www.w3.org/2000/svg";
 
   /* ----------------------------------------------------------
      Helpers de DOM
@@ -136,13 +214,6 @@
     return window.PCC || null;
   }
 
-  // Ultimo elemento de la ultima pieza que coincide por nombre: no necesario.
-  // Guardamos referencias de nodos y conectores para redibujo en resize.
-  var _conectores = []; // [{ padreEl, hijoEl }]
-
-  /* ----------------------------------------------------------
-     URL de un nodo segun su tipo
-     ---------------------------------------------------------- */
   function urlDeNodo(ip, esModem) {
     if (!ip) {
       return "";
@@ -152,79 +223,77 @@
 
   function abrirIp(ip, esModem) {
     var url = urlDeNodo(ip, esModem);
-    if (!url) {
-      return;
+    if (url) {
+      window.open(url, "_blank", "noopener");
     }
-    window.open(url, "_blank", "noopener");
   }
 
-  /* ----------------------------------------------------------
-     Construccion de un nodo visual
-     ------------------------------------------------------------
-     variante: 'core' | 'ap' | 'ptp' | 'identificado' | 'pendiente' | 'modem'
-     ---------------------------------------------------------- */
-  function construirNodo(opts) {
-    var nodo = crearEl("button", "red-nodo red-nodo--" + opts.variante);
-    nodo.type = "button";
-    if (opts.ip) {
-      nodo.setAttribute("data-ip", opts.ip);
-    }
-    if (opts.nombre) {
-      nodo.setAttribute("data-nombre", opts.nombre);
-    }
-
-    var titulo = crearEl("span", "red-nodo__titulo", opts.titulo || "");
-    nodo.appendChild(titulo);
-
-    if (opts.sub) {
-      nodo.appendChild(crearEl("span", "red-nodo__sub", opts.sub));
-    }
-    if (opts.ip) {
-      nodo.appendChild(crearEl("span", "red-nodo__ip", opts.ip));
-    } else if (opts.ipVacia) {
-      nodo.appendChild(crearEl("span", "red-nodo__ip red-nodo__ip--vacia", "sin IP"));
-    }
-
-    // Interaccion: abrir IP en pestana nueva (si tiene). Si es un cliente,
-    // ofrecer tambien abrir su ficha (click con alt / o cuando no hay IP).
-    nodo.addEventListener("click", function (ev) {
-      ev.preventDefault();
-      if (opts.cliente && (ev.altKey || !opts.ip)) {
-        abrirFichaCliente(opts.cliente);
-        return;
-      }
-      if (opts.ip) {
-        abrirIp(opts.ip, opts.variante === "modem");
-      } else if (opts.cliente) {
-        abrirFichaCliente(opts.cliente);
-      }
-    });
-
-    if (opts.cliente) {
-      nodo.title = "Clic: abrir IP · Alt+clic: abrir ficha del cliente";
-    } else if (opts.ip) {
-      nodo.title = opts.variante === "modem"
-        ? "Abrir " + urlDeNodo(opts.ip, true)
-        : "Abrir " + urlDeNodo(opts.ip, false);
-    }
-
-    return nodo;
-  }
-
-  /**
-   * abrirFichaCliente: reutiliza el modal de cliente de la app (si existe el
-   * hook) para editar/identificar al cliente desde el mapa.
-   */
   function abrirFichaCliente(cliente) {
     var PCC = obtenerPCC();
     if (PCC && PCC.UI && typeof PCC.UI.abrirModalCliente === "function") {
       PCC.UI.abrirModalCliente(cliente);
       return;
     }
-    // Si no hay hook disponible, al menos avisar por consola (no romper).
     if (window.console && console.info) {
-      console.info("Mapa de red: ficha de cliente no disponible para", cliente && cliente.nombre);
+      console.info("Mapa de red: ficha no disponible para", cliente && cliente.nombre);
     }
+  }
+
+  // Conectores a dibujar en el SVG. Cada entrada:
+  //   { desde: El, hasta: El, tipo: 'ap'|'ptp'|'cable' }
+  var _conectores = [];
+
+  /* ----------------------------------------------------------
+     Fila dentro de una tarjeta: punto de estado + nombre + IP a la derecha
+     ------------------------------------------------------------
+     estado: 'identificado' | 'infra' | 'pendiente' | 'modem'
+     ---------------------------------------------------------- */
+  function construirFila(opts) {
+    var fila = crearEl("button", "red-fila-item red-fila-item--" + opts.estado);
+    fila.type = "button";
+    if (opts.ip) {
+      fila.setAttribute("data-ip", opts.ip);
+    }
+    if (opts.nombre) {
+      fila.setAttribute("data-nombre", opts.nombre);
+    }
+
+    fila.appendChild(crearEl("span", "red-fila-item__estado"));
+    fila.appendChild(crearEl("span", "red-fila-item__nombre", opts.nombre || "—"));
+
+    var ipTxt = opts.ip ? abreviarIp(opts.ip) : "sin IP";
+    var ipEl = crearEl("span", "red-fila-item__ip" + (opts.ip ? "" : " red-fila-item__ip--vacia"), ipTxt);
+    if (opts.ip) {
+      ipEl.title = opts.ip;
+    }
+    fila.appendChild(ipEl);
+
+    fila.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      if (opts.cliente && (ev.altKey || !opts.ip)) {
+        abrirFichaCliente(opts.cliente);
+        return;
+      }
+      if (opts.ip) {
+        abrirIp(opts.ip, opts.estado === "modem");
+      } else if (opts.cliente) {
+        abrirFichaCliente(opts.cliente);
+      }
+    });
+
+    if (opts.cliente) {
+      fila.title = "Clic: abrir IP · Alt+clic: abrir ficha del cliente";
+    } else if (opts.ip) {
+      fila.title = "Abrir " + urlDeNodo(opts.ip, opts.estado === "modem");
+    }
+
+    return fila;
+  }
+
+  // Muestra ".111" como la referencia del usuario, con la IP completa en title.
+  function abreviarIp(ip) {
+    var partes = String(ip).split(".");
+    return partes.length === 4 ? "." + partes[3] : ip;
   }
 
   /* ----------------------------------------------------------
@@ -244,167 +313,215 @@
     var clientes = PCC.cargarClientes();
     var clasif = clasificarClientes(clientes, topologia);
 
-    // Reiniciar el lienzo.
     lienzo.innerHTML = "";
     _conectores = [];
 
-    // SVG inline para los conectores (debe quedar DETRAS de los nodos).
-    var svgNS = "http://www.w3.org/2000/svg";
-    var svg = document.createElementNS(svgNS, "svg");
+    // SVG inline para los conectores (detras de las tarjetas).
+    var svg = document.createElementNS(SVG_NS, "svg");
     svg.setAttribute("class", "red-conectores");
     svg.setAttribute("id", "red-svg");
     lienzo.appendChild(svg);
 
-    // Contenedor de nodos (encima del SVG).
+    // Capa de contenido (encima del SVG).
     var capa = crearEl("div", "red-capa");
     lienzo.appendChild(capa);
 
-    // --- Fila 1: Core ---
-    var filaCore = crearEl("div", "red-fila red-fila--core");
+    /* --- CORE centrado arriba --- */
     var core = topologia.core || {};
-    var nodoCore = construirNodo({
-      variante: "core",
-      titulo: core.nombre || "Core",
-      sub: "RouterOS · red " + "192.168.10.0/24",
-      ip: core.ip
+    var seccionCore = crearEl("div", "red-seccion red-seccion--core");
+    var tarjetaCore = crearEl("div", "red-core");
+    tarjetaCore.setAttribute("data-nombre", core.nombre || "Core");
+    if (core.ip) {
+      tarjetaCore.setAttribute("data-ip", core.ip);
+    }
+    tarjetaCore.appendChild(crearEl("span", "red-core__icono", "📡"));
+    var coreTxt = crearEl("div", "red-core__texto");
+    coreTxt.appendChild(crearEl("span", "red-core__titulo", core.nombre || "Core"));
+    coreTxt.appendChild(crearEl("span", "red-core__sub", "RouterOS · red 192.168.10.0/24"));
+    if (core.ip) {
+      coreTxt.appendChild(crearEl("span", "red-core__ip", core.ip));
+    }
+    tarjetaCore.appendChild(coreTxt);
+    seccionCore.appendChild(tarjetaCore);
+    capa.appendChild(seccionCore);
+
+    /* --- APs PtMP y sus antenas --- */
+    var apsPadres = (clasif.padres || []).filter(function (p) {
+      return p.tipo === "AP";
     });
-    filaCore.appendChild(nodoCore);
-    capa.appendChild(filaCore);
-
-    // --- Fila 2: APs PtMP con sus clientes colgando ---
-    var filaAps = crearEl("div", "red-fila red-fila--aps");
-    (clasif.padres || []).forEach(function (padre) {
-      if (padre.tipo !== "AP") {
-        return;
-      }
-      var columna = crearEl("div", "red-columna");
-      var meta = padreTopologia(topologia, padre.id);
-      var nodoAp = construirNodo({
-        variante: "ap",
-        titulo: padre.nombre,
-        sub: meta && meta.ssid ? "SSID " + meta.ssid : "",
-        ip: padre.ip
-      });
-      columna.appendChild(nodoAp);
-      _conectores.push({ padreEl: nodoCore, hijoEl: nodoAp });
-
-      var hijos = crearEl("div", "red-hijos");
-      padre.clientes.forEach(function (c) {
-        var nodoCli = construirNodo({
-          variante: "identificado",
-          titulo: c.nombre || "Cliente",
-          ip: c.ip,
-          cliente: c
+    if (apsPadres.length) {
+      capa.appendChild(tituloSeccion("APs Multipunto (PtMP) y sus antenas"));
+      var gridAps = crearEl("div", "red-grid-tarjetas");
+      apsPadres.forEach(function (padre) {
+        var meta = padreTopologia(topologia, padre.id);
+        var tarjeta = construirTarjetaPadre({
+          variante: "ap",
+          nombre: padre.nombre,
+          ip: padre.ip,
+          sub: metaCabecera(meta),
+          filas: fusionarAntenas(meta, padre.clientes)
         });
-        hijos.appendChild(nodoCli);
-        _conectores.push({ padreEl: nodoAp, hijoEl: nodoCli });
-      });
-      if (!padre.clientes.length) {
-        hijos.appendChild(crearEl("p", "red-vacio", "Sin clientes identificados"));
-      }
-      columna.appendChild(hijos);
-      filaAps.appendChild(columna);
-    });
-    capa.appendChild(filaAps);
-
-    // --- Fila 3: Enlaces PtP (punta -> cliente dedicado) ---
-    var filaPtp = crearEl("div", "red-fila red-fila--ptp");
-    (clasif.padres || []).forEach(function (padre) {
-      if (padre.tipo !== "PtP") {
-        return;
-      }
-      var columna = crearEl("div", "red-columna");
-      var nodoPunta = construirNodo({
-        variante: "ptp",
-        titulo: padre.nombre,
-        sub: "Enlace dedicado",
-        ip: padre.ip
-      });
-      columna.appendChild(nodoPunta);
-      _conectores.push({ padreEl: nodoCore, hijoEl: nodoPunta });
-
-      var hijos = crearEl("div", "red-hijos");
-      padre.clientes.forEach(function (c) {
-        var nodoCli = construirNodo({
-          variante: "identificado",
-          titulo: c.nombre || "Cliente",
-          ip: c.ip,
-          cliente: c
+        gridAps.appendChild(tarjeta.el);
+        _conectores.push({ desde: tarjetaCore, hasta: tarjeta.cabeceraAncla, tipo: "ap" });
+        tarjeta.anclasFila.forEach(function (ancla) {
+          _conectores.push({ desde: tarjeta.cabeceraAncla, hasta: ancla, tipo: "ap" });
         });
-        hijos.appendChild(nodoCli);
-        _conectores.push({ padreEl: nodoPunta, hijoEl: nodoCli });
       });
-      if (!padre.clientes.length) {
-        hijos.appendChild(crearEl("p", "red-vacio", "Sin cliente asignado"));
-      }
-      columna.appendChild(hijos);
-      filaPtp.appendChild(columna);
-    });
-    capa.appendChild(filaPtp);
+      capa.appendChild(gridAps);
+    }
 
-    // --- Fila 4: Modems de cable (acceso http://IP:8090) ---
+    /* --- Enlaces PtP --- */
+    var ptpPadres = (clasif.padres || []).filter(function (p) {
+      return p.tipo === "PtP";
+    });
+    if (ptpPadres.length) {
+      capa.appendChild(tituloSeccion("Enlaces Punto a Punto (PtP)"));
+      var gridPtp = crearEl("div", "red-grid-tarjetas");
+      ptpPadres.forEach(function (padre) {
+        var meta = padreTopologia(topologia, padre.id);
+        var tarjeta = construirTarjetaPadre({
+          variante: "ptp",
+          nombre: padre.nombre,
+          ip: padre.ip,
+          sub: "Enlace dedicado",
+          filas: fusionarAntenas(meta, padre.clientes)
+        });
+        gridPtp.appendChild(tarjeta.el);
+        _conectores.push({ desde: tarjetaCore, hasta: tarjeta.cabeceraAncla, tipo: "ptp" });
+        tarjeta.anclasFila.forEach(function (ancla) {
+          _conectores.push({ desde: tarjeta.cabeceraAncla, hasta: ancla, tipo: "ptp" });
+        });
+      });
+      capa.appendChild(gridPtp);
+    }
+
+    /* --- Modems de cable --- */
     var modems = Array.isArray(topologia.modems) ? topologia.modems : [];
     if (modems.length) {
-      var bloqueModems = crearEl("div", "red-bloque red-bloque--modems");
-      bloqueModems.appendChild(crearEl("h3", "red-bloque__titulo", "Modems de cable (http://IP:8090)"));
-      var gridModems = crearEl("div", "red-grid");
+      capa.appendChild(tituloSeccion("Clientes directos por cable (modem)"));
+      var tarjetaModem = crearEl("div", "red-tarjeta red-tarjeta--modem");
+      var cabModem = crearEl("div", "red-tarjeta__cabecera red-tarjeta__cabecera--modem");
+      cabModem.appendChild(crearEl("span", "red-tarjeta__nombre", "Modems por cable"));
+      cabModem.appendChild(crearEl("span", "red-tarjeta__ip", "http://IP:8090"));
+      tarjetaModem.appendChild(cabModem);
+      var cuerpoModem = crearEl("div", "red-tarjeta__cuerpo");
       modems.forEach(function (ip) {
-        var nodoModem = construirNodo({
-          variante: "modem",
-          titulo: "Modem",
-          ip: ip
-        });
-        gridModems.appendChild(nodoModem);
+        var fila = construirFila({ estado: "modem", nombre: "Modem", ip: ip });
+        cuerpoModem.appendChild(fila);
+        _conectores.push({ desde: tarjetaCore, hasta: fila, tipo: "cable" });
       });
-      bloqueModems.appendChild(gridModems);
-      capa.appendChild(bloqueModems);
+      tarjetaModem.appendChild(cuerpoModem);
+      capa.appendChild(tarjetaModem);
     }
 
-    // --- Fila 5: Falta identificar / sin IP (naranja) ---
-    var bloquePend = crearEl("div", "red-bloque red-bloque--pendientes");
-    bloquePend.appendChild(crearEl("h3", "red-bloque__titulo", "Falta identificar / sin IP"));
-    var gridPend = crearEl("div", "red-grid");
-
-    clasif.pendientes.forEach(function (c) {
-      var nodoCli = construirNodo({
-        variante: "pendiente",
-        titulo: c.nombre || "Cliente",
-        ipVacia: !((c.ip || "").trim()),
-        ip: (c.ip || "").trim() || null,
-        cliente: c
-      });
-      gridPend.appendChild(nodoCli);
-    });
-
-    // Nodos pendientes de infraestructura (sin cliente): .61 TP-LINK, .18
+    /* --- Pendientes / Falta identificar --- */
     var pendInfra = Array.isArray(topologia.pendientes) ? topologia.pendientes : [];
+    capa.appendChild(tituloSeccion("Pendientes totales / Falta identificar"));
+    var tarjetaPend = crearEl("div", "red-tarjeta red-tarjeta--pendiente");
+    var cabPend = crearEl("div", "red-tarjeta__cabecera red-tarjeta__cabecera--pendiente");
+    cabPend.appendChild(crearEl("span", "red-tarjeta__nombre", "Falta identificar"));
+    tarjetaPend.appendChild(cabPend);
+    var cuerpoPend = crearEl("div", "red-tarjeta__cuerpo");
+
     pendInfra.forEach(function (ip) {
       var etiqueta = ip.indexOf(".61") !== -1 ? "TP-LINK" : "Pendiente";
-      var nodoInfra = construirNodo({
-        variante: "pendiente",
-        titulo: etiqueta,
-        ip: ip
-      });
-      gridPend.appendChild(nodoInfra);
+      cuerpoPend.appendChild(construirFila({ estado: "pendiente", nombre: etiqueta, ip: ip }));
     });
-
-    if (!clasif.pendientes.length && !pendInfra.length) {
-      gridPend.appendChild(crearEl("p", "red-vacio", "Todo identificado 🎉"));
+    clasif.pendientes.forEach(function (c) {
+      var ip = (c.ip || "").trim();
+      cuerpoPend.appendChild(construirFila({
+        estado: "pendiente",
+        nombre: c.nombre || "Cliente",
+        ip: ip || null,
+        cliente: c
+      }));
+    });
+    if (!pendInfra.length && !clasif.pendientes.length) {
+      cuerpoPend.appendChild(crearEl("p", "red-vacio", "Todo identificado 🎉"));
     }
-    bloquePend.appendChild(gridPend);
-    capa.appendChild(bloquePend);
+    tarjetaPend.appendChild(cuerpoPend);
+    capa.appendChild(tarjetaPend);
 
-    // Dibujar los conectores una vez que el layout esta en el DOM.
+    /* --- Lista informativa: clientes sin IP --- */
+    var sinIp = clasif.pendientes.filter(function (c) {
+      return !((c.ip || "").trim());
+    });
+    if (sinIp.length) {
+      capa.appendChild(tituloSeccion("En tu lista de cobro, SIN IP aún"));
+      var listaSinIp = crearEl("ul", "red-lista-sinip");
+      sinIp.forEach(function (c) {
+        listaSinIp.appendChild(crearEl("li", "red-lista-sinip__item", c.nombre || "Cliente"));
+      });
+      capa.appendChild(listaSinIp);
+    }
+
+    // Dibujar los conectores una vez el layout esta en el DOM.
     redibujarConectores();
-
-    // Reaplicar el filtro de busqueda vigente (si hay texto).
     aplicarFiltroBusqueda();
   }
 
+  function tituloSeccion(texto) {
+    var h = crearEl("h3", "red-titulo-seccion", texto);
+    return h;
+  }
+
+  function metaCabecera(meta) {
+    if (!meta) {
+      return "";
+    }
+    var partes = [];
+    if (meta.ssid) {
+      partes.push("SSID " + meta.ssid);
+    }
+    if (meta.frecuencia) {
+      partes.push(meta.frecuencia);
+    }
+    return partes.join(" · ");
+  }
+
   /**
-   * padreTopologia: localiza el objeto de topologia (AP o punta) por id para
-   * leer metadatos como ssid/frecuencia.
+   * construirTarjetaPadre: tarjeta ancha con cabecera de color y filas dentro.
+   * Devuelve { el, cabeceraAncla, anclasFila } para los conectores.
    */
+  function construirTarjetaPadre(opts) {
+    var tarjeta = crearEl("div", "red-tarjeta red-tarjeta--" + opts.variante);
+
+    var cab = crearEl("div", "red-tarjeta__cabecera red-tarjeta__cabecera--" + opts.variante);
+    cab.setAttribute("data-nombre", opts.nombre || "");
+    if (opts.ip) {
+      cab.setAttribute("data-ip", opts.ip);
+    }
+    var cabTxt = crearEl("div", "red-tarjeta__cabtexto");
+    cabTxt.appendChild(crearEl("span", "red-tarjeta__nombre", opts.nombre || ""));
+    if (opts.sub) {
+      cabTxt.appendChild(crearEl("span", "red-tarjeta__sub", opts.sub));
+    }
+    cab.appendChild(cabTxt);
+    if (opts.ip) {
+      cab.appendChild(crearEl("span", "red-tarjeta__ip", opts.ip));
+    }
+    tarjeta.appendChild(cab);
+
+    var cuerpo = crearEl("div", "red-tarjeta__cuerpo");
+    var anclasFila = [];
+    (opts.filas || []).forEach(function (f) {
+      var fila = construirFila({
+        estado: f.estado === "identificado" ? "identificado" : "infra",
+        nombre: f.nombre,
+        ip: f.ip || null,
+        cliente: f.cliente || null
+      });
+      cuerpo.appendChild(fila);
+      anclasFila.push(fila);
+    });
+    if (!(opts.filas || []).length) {
+      cuerpo.appendChild(crearEl("p", "red-vacio", "Sin antenas"));
+    }
+    tarjeta.appendChild(cuerpo);
+
+    return { el: tarjeta, cabeceraAncla: cab, anclasFila: anclasFila };
+  }
+
   function padreTopologia(topologia, id) {
     var listas = [topologia.aps || [], topologia.puntas || []];
     for (var i = 0; i < listas.length; i++) {
@@ -418,7 +535,7 @@
   }
 
   /* ----------------------------------------------------------
-     Conectores SVG curvos (bezier) padre -> hijo
+     Conectores SVG: inalambricos (punteados, microondas) y cable (solido)
      ---------------------------------------------------------- */
   function redibujarConectores() {
     var svg = $("#red-svg");
@@ -426,41 +543,46 @@
     if (!svg || !lienzo) {
       return;
     }
-    // Limpiar paths previos.
     while (svg.firstChild) {
       svg.removeChild(svg.firstChild);
     }
 
     var base = lienzo.getBoundingClientRect();
-    // Ajustar el tamano del SVG al contenido real del lienzo.
-    svg.setAttribute("width", String(lienzo.scrollWidth));
-    svg.setAttribute("height", String(lienzo.scrollHeight));
-    svg.setAttribute("viewBox", "0 0 " + lienzo.scrollWidth + " " + lienzo.scrollHeight);
-
-    var svgNS = "http://www.w3.org/2000/svg";
+    var w = lienzo.scrollWidth;
+    var h = lienzo.scrollHeight;
+    svg.setAttribute("width", String(w));
+    svg.setAttribute("height", String(h));
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
 
     _conectores.forEach(function (par) {
-      if (!par.padreEl || !par.hijoEl) {
+      if (!par.desde || !par.hasta) {
         return;
       }
-      var rp = par.padreEl.getBoundingClientRect();
-      var rh = par.hijoEl.getBoundingClientRect();
+      var rp = par.desde.getBoundingClientRect();
+      var rh = par.hasta.getBoundingClientRect();
 
-      // Coordenadas relativas al lienzo (teniendo en cuenta el scroll interno).
+      // Sale del borde inferior del padre, entra por el borde superior del hijo.
       var x1 = rp.left - base.left + lienzo.scrollLeft + rp.width / 2;
       var y1 = rp.bottom - base.top + lienzo.scrollTop;
       var x2 = rh.left - base.left + lienzo.scrollLeft + rh.width / 2;
       var y2 = rh.top - base.top + lienzo.scrollTop;
 
-      var dy = Math.max(20, (y2 - y1) / 2);
+      // Si el hijo esta por encima o al lado (grilla), ajustar puntos para
+      // que la curva no se vea invertida: usar centros verticales.
+      if (y2 <= y1) {
+        y1 = rp.top - base.top + lienzo.scrollTop + rp.height / 2;
+        y2 = rh.top - base.top + lienzo.scrollTop + rh.height / 2;
+      }
+
+      var dy = Math.max(18, Math.abs(y2 - y1) / 2);
       var d = "M " + x1 + " " + y1 +
         " C " + x1 + " " + (y1 + dy) +
         " " + x2 + " " + (y2 - dy) +
         " " + x2 + " " + y2;
 
-      var path = document.createElementNS(svgNS, "path");
+      var path = document.createElementNS(SVG_NS, "path");
       path.setAttribute("d", d);
-      path.setAttribute("class", "red-conector");
+      path.setAttribute("class", "red-conector red-conector--" + par.tipo);
       svg.appendChild(path);
     });
   }
@@ -475,22 +597,26 @@
       return;
     }
     var termino = (input.value || "").trim().toLowerCase();
-    var nodos = lienzo.querySelectorAll(".red-nodo");
+    // Objetivos: filas y cabeceras/tarjetas con data-nombre/data-ip.
+    var nodos = lienzo.querySelectorAll(
+      ".red-fila-item, .red-tarjeta__cabecera, .red-core"
+    );
 
+    var i;
     if (!termino) {
-      for (var i = 0; i < nodos.length; i++) {
-        nodos[i].classList.remove("red-nodo--match", "red-nodo--dim");
+      for (i = 0; i < nodos.length; i++) {
+        nodos[i].classList.remove("red-match", "red-dim");
       }
       return;
     }
 
-    for (var k = 0; k < nodos.length; k++) {
-      var nodo = nodos[k];
+    for (i = 0; i < nodos.length; i++) {
+      var nodo = nodos[i];
       var nombre = (nodo.getAttribute("data-nombre") || nodo.textContent || "").toLowerCase();
       var ip = (nodo.getAttribute("data-ip") || "").toLowerCase();
       var coincide = nombre.indexOf(termino) !== -1 || ip.indexOf(termino) !== -1;
-      nodo.classList.toggle("red-nodo--match", coincide);
-      nodo.classList.toggle("red-nodo--dim", !coincide);
+      nodo.classList.toggle("red-match", coincide);
+      nodo.classList.toggle("red-dim", !coincide);
     }
   }
 
@@ -498,8 +624,6 @@
      Alternar visibilidad de la vista Red (opt-in)
      ---------------------------------------------------------- */
   function panelesPrincipales() {
-    // Secciones de la vista normal: todas las .panel dentro de .contenido
-    // excepto la propia vista de red.
     var cont = $(".contenido");
     if (!cont) {
       return [];
@@ -520,7 +644,7 @@
     if (!vista) {
       return;
     }
-    var mostrar = vista.hidden; // si estaba oculta, la mostramos.
+    var mostrar = vista.hidden;
     vista.hidden = !mostrar;
     panelesPrincipales().forEach(function (p) {
       p.hidden = mostrar;
@@ -540,9 +664,6 @@
 
   /* ----------------------------------------------------------
      Refresco dinamico: envolver window.PCC.UI.render de forma aditiva
-     ------------------------------------------------------------
-     Asi, cuando la app re-renderiza (incluido firebase-sync.js al llegar
-     snapshots remotos), si la vista Red esta visible, el mapa se redibuja.
      ---------------------------------------------------------- */
   var _renderEnvuelto = false;
   function envolverRender() {
@@ -558,7 +679,6 @@
       }
       return r;
     };
-    // Exponer tambien un render del mapa para quien lo necesite.
     if (window.PCC_RED) {
       window.PCC_RED.render = dibujarMapa;
     }
@@ -569,6 +689,7 @@
   /* ----------------------------------------------------------
      Arranque
      ---------------------------------------------------------- */
+  var _reResize = null;
   function iniciar() {
     var btn = $("#btn-red");
     if (btn) {
@@ -582,14 +703,16 @@
     }
 
     window.addEventListener("resize", function () {
-      if (vistaRedVisible()) {
-        redibujarConectores();
+      if (!vistaRedVisible()) {
+        return;
       }
+      // Reflow puede cambiar la grilla (desktop <-> movil): redibujar.
+      if (_reResize) {
+        clearTimeout(_reResize);
+      }
+      _reResize = setTimeout(redibujarConectores, 80);
     });
 
-    // Envolver el render de la UI en cuanto este disponible. app.js asigna
-    // window.PCC.UI dentro de iniciar() (tras DOMContentLoaded); reintentar
-    // brevemente por si el orden de ejecucion no lo tiene listo aun.
     if (!envolverRender()) {
       var intentos = 0;
       var temporizador = setInterval(function () {
