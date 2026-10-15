@@ -2539,6 +2539,9 @@
       setValor("#cliente-tipo-pago", cliente.tipoPago);
       setValor("#cliente-estatus", cliente.estatus);
       setValor("#cliente-socio", cliente.socio === "Octavio" ? "Octavio" : "Carlos");
+      // Campos de red (FEAT-003): tipo de conexion y AP/enlace padre.
+      setValor("#cliente-tipo-conexion", cliente.tipoConexion || "");
+      setValor("#cliente-ap", cliente.apId || "");
     } else {
       if (titulo) {
         titulo.textContent = "Nuevo Cliente";
@@ -2547,6 +2550,8 @@
       setValor("#cliente-tipo-pago", "PTP");
       setValor("#cliente-estatus", "Activo");
       setValor("#cliente-socio", "Carlos");
+      setValor("#cliente-tipo-conexion", "");
+      setValor("#cliente-ap", "");
     }
     abrirModal("#modal-cliente");
   }
@@ -2591,7 +2596,11 @@
       diaPago: diaPago,
       tipoPago: valor("#cliente-tipo-pago"),
       estatus: valor("#cliente-estatus"),
-      socio: valor("#cliente-socio")
+      socio: valor("#cliente-socio"),
+      // Campos de red (FEAT-003). crearCliente normaliza tipoConexion
+      // (valores invalidos -> '') y conserva apId tal cual.
+      tipoConexion: valor("#cliente-tipo-conexion"),
+      apId: valor("#cliente-ap")
     };
 
     var lista = clientes();
@@ -3089,7 +3098,10 @@
       render: render,
       aplicarTema: aplicarTema,
       sincronizarChips: sincronizarChips,
-      sincronizarPestanas: sincronizarPestanas
+      sincronizarPestanas: sincronizarPestanas,
+      // Expuesto para el mapa de red (FEAT-003): permite abrir la ficha de
+      // un cliente desde un nodo del mapa para identificarlo (IP/AP).
+      abrirModalCliente: abrirModalCliente
     };
 
     render();

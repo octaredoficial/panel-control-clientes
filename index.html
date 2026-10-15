@@ -60,6 +60,10 @@
           <span class="btn__icono" aria-hidden="true">➕</span>
           <span>Nuevo Cliente</span>
         </button>
+        <button type="button" id="btn-red" class="btn btn--secundario" aria-pressed="false" title="Ver el mapa de la red" aria-label="Ver el mapa de la red">
+          <span class="btn__icono" aria-hidden="true">🗺️</span>
+          <span>Red</span>
+        </button>
         <button type="button" id="btn-tema" class="btn btn--icono" title="Cambiar modo claro / oscuro" aria-label="Cambiar modo claro / oscuro">
           <span id="btn-tema-icono" aria-hidden="true">🌙</span>
         </button>
@@ -71,6 +75,38 @@
     </header>
 
     <main class="contenido">
+
+      <!-- ================= MAPA DE RED (opt-in, oculto por defecto) =================
+        Vista alterna "Mapa de red" (FEAT-003). El boton #btn-red del header
+        alterna entre la vista de paneles (resto de .panel de .contenido) y
+        esta seccion. red-mapa.js inyecta los nodos dentro de #red-lienzo y
+        dibuja los conectores con un <svg> inline. Los clientes se derivan de
+        window.PCC.cargarClientes(); la topologia de window.PCC.TOPOLOGIA.
+      -->
+      <section class="panel panel--red" id="vista-red" aria-labelledby="red-titulo" hidden>
+        <div class="panel__cabecera panel__cabecera--red">
+          <h2 class="panel__titulo" id="red-titulo">Mapa de red
+            <span class="panel__nota" title="Los clientes se cruzan con la red: con IP asignada aparecen bajo su AP o enlace; sin IP, en 'falta identificar'.">WISP OCTARED · 192.168.10.0/24</span>
+          </h2>
+          <input
+            type="search"
+            id="red-busqueda"
+            class="campo campo--busqueda red-busqueda"
+            placeholder="Buscar por nombre o IP…"
+            aria-label="Buscar nodos de la red" />
+        </div>
+
+        <ul class="red-leyenda" aria-label="Leyenda del mapa de red">
+          <li class="red-leyenda__item"><span class="red-leyenda__punto red-leyenda__punto--core"></span> Core</li>
+          <li class="red-leyenda__item"><span class="red-leyenda__punto red-leyenda__punto--ap"></span> AP (PtMP)</li>
+          <li class="red-leyenda__item"><span class="red-leyenda__punto red-leyenda__punto--ptp"></span> Enlace PtP</li>
+          <li class="red-leyenda__item"><span class="red-leyenda__punto red-leyenda__punto--identificado"></span> Cliente identificado</li>
+          <li class="red-leyenda__item"><span class="red-leyenda__punto red-leyenda__punto--pendiente"></span> Falta identificar</li>
+        </ul>
+
+        <!-- red-mapa.js inyecta aqui el <svg> de conectores y los nodos. -->
+        <div class="red-lienzo" id="red-lienzo" role="group" aria-label="Diagrama de la red"></div>
+      </section>
 
       <!-- ================= RESUMEN DEL MES ================= -->
       <section class="panel panel--resumen" aria-labelledby="resumen-titulo">
@@ -414,6 +450,31 @@
         <div class="campo-grupo">
           <label class="campo-label" for="cliente-direccion">Dirección</label>
           <input type="text" id="cliente-direccion" name="direccion" class="campo" />
+        </div>
+
+        <!-- Campos de red (FEAT-003): tipo de conexion y AP/enlace padre.
+             La IP de red se reutiliza del campo #cliente-ip de arriba. -->
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-tipo-conexion">Tipo de conexión (red)</label>
+            <select id="cliente-tipo-conexion" name="tipoConexion" class="campo campo--select">
+              <option value="">Sin asignar (falta identificar)</option>
+              <option value="AP">AP (PtMP)</option>
+              <option value="PtP">PtP (enlace dedicado)</option>
+              <option value="Modem">Modem (cable)</option>
+            </select>
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-ap">AP / Enlace</label>
+            <select id="cliente-ap" name="apId" class="campo campo--select">
+              <option value="">Sin asignar</option>
+              <option value="AP_OCTARED_3">AP OCTARED3 (OCTARED3)</option>
+              <option value="LITEAP_AC1">LiteAP AC-1 (CALOSWiFi)</option>
+              <option value="LITEAP_AC2">LiteAP AC-2 (CARLOSWiFi)</option>
+              <option value="PTP_MERCEDES_RH">PtP Mercedes RH</option>
+              <option value="PTP_CASA_44">PtP Casa 44</option>
+            </select>
+          </div>
         </div>
 
         <div class="campo-fila">
@@ -779,6 +840,9 @@
   </div>
 
   <script src="app.js" defer></script>
+  <!-- Vista "Mapa de red" (FEAT-003). Lee window.PCC de forma perezosa, por
+       lo que debe cargarse despues de app.js (defer preserva el orden). -->
+  <script src="red-mapa.js" defer></script>
   <!-- Modulo de sincronizacion con Firebase (Auth + Firestore). Solo se
        ejecuta en el navegador; se carga desde el CDN gstatic. -->
   <script type="module" src="firebase-sync.js"></script>

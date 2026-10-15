@@ -1253,6 +1253,250 @@ body {
   gap: 8px;
 }
 
+/* ====================================================================
+   MAPA DE RED (FEAT-003)
+   --------------------------------------------------------------------
+   Semantica de colores del diagrama original (misma en claro y oscuro):
+     core = ambar #f0a500 · AP = azul #3b82f6 · PtP = teal #14b8a6
+     identificado = verde #22c55e · pendiente = naranja #f59e0b
+   ==================================================================== */
+.panel--red {
+  --red-core: #f0a500;
+  --red-ap: #3b82f6;
+  --red-ptp: #14b8a6;
+  --red-identificado: #22c55e;
+  --red-pendiente: #f59e0b;
+  --red-conector: var(--borde-fuerte);
+}
+
+.panel__cabecera--red {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.red-busqueda {
+  max-width: 320px;
+  flex: 1 1 220px;
+}
+
+/* ---------------------- Leyenda --------------------------- */
+.red-leyenda {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 4px 0 16px;
+  padding: 0;
+}
+
+.red-leyenda__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+}
+
+.red-leyenda__punto {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.red-leyenda__punto--core { background: var(--red-core); }
+.red-leyenda__punto--ap { background: var(--red-ap); }
+.red-leyenda__punto--ptp { background: var(--red-ptp); }
+.red-leyenda__punto--identificado { background: var(--red-identificado); }
+.red-leyenda__punto--pendiente { background: var(--red-pendiente); }
+
+/* ---------------------- Lienzo ---------------------------- */
+.red-lienzo {
+  position: relative;
+  width: 100%;
+  min-height: 320px;
+  overflow-x: auto;
+  padding: 8px 4px 12px;
+  border-radius: var(--radio-sm);
+  background:
+    radial-gradient(circle at 1px 1px, var(--borde) 1px, transparent 0) 0 0 / 22px 22px,
+    var(--superficie-2);
+}
+
+/* SVG de conectores: detras de los nodos, no intercepta clics. */
+.red-conectores {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.red-conector {
+  fill: none;
+  stroke: var(--red-conector);
+  stroke-width: 2;
+  opacity: 0.65;
+}
+
+/* Capa de nodos encima del SVG. */
+.red-capa {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: max-content;
+}
+
+.red-fila {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.red-fila--aps,
+.red-fila--ptp {
+  align-items: flex-start;
+}
+
+.red-columna {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.red-hijos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ---------------------- Bloques (modems / pendientes) ----- */
+.red-bloque {
+  position: relative;
+  z-index: 1;
+  border: 1px dashed var(--borde-fuerte);
+  border-radius: var(--radio-sm);
+  padding: 12px 14px;
+}
+
+.red-bloque--pendientes {
+  border-color: var(--red-pendiente);
+}
+
+.red-bloque__titulo {
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--texto-suave);
+}
+
+.red-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.red-vacio {
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  font-style: italic;
+}
+
+/* ---------------------- Nodos ----------------------------- */
+.red-nodo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 128px;
+  max-width: 190px;
+  padding: 9px 12px;
+  border: 1px solid var(--borde-fuerte);
+  border-left: 4px solid var(--borde-fuerte);
+  border-radius: var(--radio-sm);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.08s ease, box-shadow 0.15s ease, opacity 0.15s ease,
+    border-color 0.15s ease;
+  box-shadow: var(--sombra);
+}
+
+.red-nodo:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.14);
+}
+
+.red-nodo:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.red-nodo__titulo {
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.red-nodo__sub {
+  font-size: 0.72rem;
+  color: var(--texto-suave);
+}
+
+.red-nodo__ip {
+  font-size: 0.74rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color: var(--texto-suave);
+}
+
+.red-nodo__ip--vacia {
+  font-style: italic;
+}
+
+/* Variantes de color (borde izquierdo + chip de color de fondo suave). */
+.red-nodo--core {
+  border-left-color: var(--red-core);
+  background: color-mix(in srgb, var(--red-core) 12%, var(--superficie));
+}
+.red-nodo--ap {
+  border-left-color: var(--red-ap);
+  background: color-mix(in srgb, var(--red-ap) 10%, var(--superficie));
+}
+.red-nodo--ptp {
+  border-left-color: var(--red-ptp);
+  background: color-mix(in srgb, var(--red-ptp) 10%, var(--superficie));
+}
+.red-nodo--identificado {
+  border-left-color: var(--red-identificado);
+}
+.red-nodo--pendiente {
+  border-left-color: var(--red-pendiente);
+  background: color-mix(in srgb, var(--red-pendiente) 10%, var(--superficie));
+}
+.red-nodo--modem {
+  border-left-color: var(--texto-suave);
+}
+
+/* Estados del buscador. */
+.red-nodo--match {
+  border-color: var(--acento);
+  box-shadow: 0 0 0 2px var(--acento-suave);
+}
+.red-nodo--dim {
+  opacity: 0.3;
+}
+
 /* ---------------------- Responsive ------------------------ */
 @media (max-width: 860px) {
   .metricas {
@@ -1319,6 +1563,21 @@ body {
 
   .pestanas {
     overflow-x: auto;
+  }
+
+  /* Mapa de red: el lienzo mantiene su ancho minimo y permite scroll
+     horizontal sin romper el layout de la app. */
+  .panel__cabecera--red {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .red-busqueda {
+    max-width: 100%;
+  }
+
+  .red-fila {
+    gap: 18px;
   }
 
   .modal {
