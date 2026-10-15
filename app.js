@@ -257,8 +257,61 @@
                                   v1 sin este campo migran a 'Carlos')
        fechaProximoPago: string   ISO 'YYYY-MM-DD' (vencimiento vigente)
        ultimoPago:       string   ISO 'YYYY-MM-DD' del ultimo pago, o ''
+       tipoConexion:     string   'AP' | 'PtP' | 'Modem' | '' (topologia de
+                                  red; '' = falta identificar)
+       apId:             string   id del AP o enlace padre (ver RED_IDS), o ''
      }
      ---------------------------------------------------------- */
+
+  /* ----------------------------------------------------------
+     5.0 Topologia de red (FEAT-002)
+     ------------------------------------------------------------
+     Identificadores estables de los AP/enlaces de la red. Se usan como
+     'apId' en el modelo de Cliente y los reutilizara el mapa (FEAT-003)
+     para no duplicar strings. Core: MikroTik hEX S 192.168.10.1
+     (RouterOS 7.24.4, red 192.168.10.0/24).
+     ---------------------------------------------------------- */
+  var RED_IDS = {
+    CORE: "CORE_MIKROTIK",           // MikroTik hEX S 192.168.10.1
+    AP_OCTARED_3: "AP_OCTARED_3",    // AP PtMP .26, SSID OCTARED3, 5105 MHz
+    LITEAP_AC1: "LITEAP_AC1",        // LiteAP AC-1 .20, SSID CALOSWiFi, 5230 MHz
+    LITEAP_AC2: "LITEAP_AC2",        // LiteAP AC-2 .21, SSID CARLOSWiFi, 5135 MHz
+    PTP_MERCEDES_RH: "PTP_MERCEDES_RH", // Enlace PtP, punta .25 -> Mercedez RH .36
+    PTP_CASA_44: "PTP_CASA_44"       // Enlace PtP, punta .15 -> casa 44 .145
+  };
+
+  // Tipos de conexion validos para 'tipoConexion'.
+  var TIPOS_CONEXION = ["AP", "PtP", "Modem"];
+
+  // Estructura de topologia que consumira el mapa (FEAT-003). Se declara aqui
+  // para que SEED y mapa coincidan en ids, IPs y jerarquia (nodo padre).
+  var TOPOLOGIA = {
+    core: { id: RED_IDS.CORE, nombre: "MikroTik hEX S", ip: "192.168.10.1", tipo: "core" },
+    aps: [
+      { id: RED_IDS.AP_OCTARED_3, nombre: "AP OCTARED3", ip: "192.168.10.26", ssid: "OCTARED3", frecuencia: "5105 MHz", tipo: "AP" },
+      { id: RED_IDS.LITEAP_AC1, nombre: "LiteAP AC-1", ip: "192.168.10.20", ssid: "CALOSWiFi", frecuencia: "5230 MHz", tipo: "AP" },
+      { id: RED_IDS.LITEAP_AC2, nombre: "LiteAP AC-2", ip: "192.168.10.21", ssid: "CARLOSWiFi", frecuencia: "5135 MHz", tipo: "AP" }
+    ],
+    // Puntas de los enlaces PtP dedicados (1 a 1 con su cliente).
+    puntas: [
+      { id: RED_IDS.PTP_MERCEDES_RH, nombre: "PtP Mercedes RH", ip: "192.168.10.25", tipo: "PtP" },
+      { id: RED_IDS.PTP_CASA_44, nombre: "PtP Casa 44", ip: "192.168.10.15", tipo: "PtP" }
+    ],
+    // Modems directos por cable (acceso http://IP:8090). No son clientes de cobro.
+    modems: ["192.168.10.19", "192.168.10.22", "192.168.10.24", "192.168.10.101"],
+    // Nodos pendientes por identificar (infraestructura sin cliente asignado).
+    pendientes: ["192.168.10.61", "192.168.10.18"]
+  };
+
+  /**
+   * normalizarTipoConexion: devuelve un tipo de conexion valido o '' si el
+   * valor no pertenece al conjunto {AP, PtP, Modem}.
+   * @param {*} valor
+   * @returns {string}
+   */
+  function normalizarTipoConexion(valor) {
+    return TIPOS_CONEXION.indexOf(valor) !== -1 ? valor : "";
+  }
 
   /**
    * crearCliente: fabrica un objeto Cliente aplicando valores por defecto.
@@ -278,6 +331,12 @@
       celular: datos.celular ? String(datos.celular) : "",
       direccion: datos.direccion || "",
       ip: datos.ip || "",
+      // Topologia de red (FEAT-002): la IP sigue siendo 'ip'. tipoConexion
+      // indica como se conecta el cliente (AP PtMP, enlace PtP, modem por
+      // cable) y apId el AP/enlace padre (ver RED_IDS). Clientes viejos sin
+      // estos campos quedan como '' -> "falta identificar".
+      tipoConexion: normalizarTipoConexion(datos.tipoConexion),
+      apId: datos.apId ? String(datos.apId) : "",
       megas: datos.megas || "",
       monto: datos.monto != null ? Number(datos.monto) : MONTO_DEFAULT,
       fechaInstalacion: datos.fechaInstalacion
@@ -1084,46 +1143,54 @@
   }
 
   /* ----------------------------------------------------------
-     8. Dataset SEED de ejemplo (~24 clientes)
+     8. Dataset SEED real (18 clientes)
      ------------------------------------------------------------
-     Basado en la tabla de referencia del briefing. Fechas en ISO.
-     Las direcciones/IP son genericas de ejemplo. Mezcla de tipos
-     PTP/Directo, al menos 1 Pausado y varios Vencidos.
-     ---------------------------------------------------------- */
+     Lista REAL confirmada por el usuario (tabla + diagrama de red).
+     Reemplaza por completo al dataset ficticio anterior.
+     Fechas en ISO 'YYYY-MM-DD' (convertidas desde dd/mm/aaaa).
+     diaPago = dia del mes de la fecha de instalacion.
+     Todos los clientes quedan 'Activo'. Instalacion $0 en todos.
 
-  // Datos crudos: [nombre, celular, megas, instalacionISO, monto, diaPago,
-  //                tipoPago, estatus, ultimoPagoISO, socio?]
-  // ultimoPago '' = aun sin pagar el ciclo (puede quedar vencido).
-  // socio (10a columna, opcional): 'Octavio' marca al UNICO cliente que
-  // le paga directo a Octavio (monto 500). El resto omite la columna y
-  // queda en 'Carlos' por default via crearCliente.
+     Decisiones de negocio (NO inventar datos que alteren el reparto):
+      - tipoPago financiero = 'Directo' para TODOS por defecto. La tabla
+        del usuario no distingue PTP/Directo a nivel financiero; usar
+        'Directo' evita atribuir pagos a reparto de forma arbitraria.
+      - socio = 'Octavio' SOLO para 'casa 44 LIZBETH' (unico que paga
+        directo a Octavio); el resto 'Carlos'.
+      - estatusPago (marca de la fila, NO el estatus Activo/Pausado):
+        'enCurso' (Cresencia) y 'pagado' (Yolanda) => al corriente;
+        'debe' => vencido. Se usa por NOMBRE/marca, sin indices magicos.
+
+     Campos de red (tipoConexion/apId/ip) precargados SOLO para los 8
+     clientes con IP confirmada en el diagrama. El resto queda sin ip y
+     con tipoConexion/apId '' => "falta identificar".
+
+     Cada fila es un objeto para legibilidad:
+      { nombre, celular, megas, instalacion (ISO), monto, estatusPago,
+        socio?, ip?, tipoConexion?, apId? }
+     ---------------------------------------------------------- */
   var SEED_RAW = [
-    ["Cresencia caraos casa P4", "9842785595", "5 MB", "2025-11-02", 500, 2, "Directo", "Activo", "2025-11-02"],
-    ["VECINA YOLANDA CASA 15", "9841000015", "10 MB", "2026-05-05", 500, 5, "PTP", "Activo", ""],
-    ["Hermelinda", "9841311983", "10 MB", "2024-07-05", 500, 5, "Directo", "Activo", ""],
-    ["MICAELA HERNANDEZ", "9671949286", "10 MB", "2026-02-07", 500, 7, "PTP", "Activo", ""],
-    ["casa 44 LIZBETH", "9842704365", "10 MB", "2025-11-12", 500, 12, "Directo", "Activo", ""],
-    ["Daniel casa 44", "9842086116", "10 MB", "2024-04-16", 500, 16, "PTP", "Activo", ""],
-    ["Nieto", "9848062139", "20 MB", "2024-07-17", 600, 17, "Directo", "Activo", ""],
-    ["Lupita casa 26", "9982047915", "20 MB", "2025-03-21", 700, 21, "PTP", "Activo", ""],
-    ["Gabriela", "9844491677", "20 MB", "2024-09-21", 600, 21, "Directo", "Activo", ""],
-    ["URIEL", "9841913321", "10 MB", "2026-12-25", 500, 25, "PTP", "Activo", ""],
-    ["Reyes vecino", "9841163234", "30 MB", "2024-04-27", 600, 27, "Directo", "Activo", ""],
-    ["TIENDA INDOMABLE", "9841163234", "5 MB", "2025-03-24", 500, 24, "PTP", "Activo", ""],
-    ["Mercedez RH", "2711657112", "10 MB", "2024-04-28", 400, 28, "Directo", "Activo", ""],
-    ["Berenice", "9841417166", "10 MB", "2024-10-30", 500, 30, "PTP", "Activo", ""],
-    ["Jessy casa 43", "9841000043", "5 MB", "2025-02-24", 500, 24, "Directo", "Activo", ""],
-    ["Obed", "9841564118", "10 MB", "2024-07-27", 500, 27, "PTP", "Activo", ""],
-    ["VECINO DE BRANDON", "9841000088", "10 MB", "2026-03-28", 500, 28, "Directo", "Activo", ""],
-    // Unico cliente que le paga directo a Octavio (socio 'Octavio', $500).
-    ["CASA 17 CARMEN LAVAND", "9841003920", "10 MB", "2026-09-16", 500, 16, "PTP", "Activo", "2026-09-16", "Octavio"],
-    // Relleno hasta ~24 con mezcla de tipos/estatus:
-    ["Fernando casa 8", "9841002008", "15 MB", "2024-06-10", 550, 10, "Directo", "Activo", ""],
-    ["Rosa Maria", "9841002009", "10 MB", "2025-01-18", 500, 18, "PTP", "Pausado", ""],
-    ["Taqueria El Buen Sabor", "9841002010", "30 MB", "2024-08-03", 800, 3, "Directo", "Activo", ""],
-    ["Jorge casa 12", "9841002011", "10 MB", "2025-05-09", 500, 9, "PTP", "Activo", ""],
-    ["Abarrotes Lupita", "9841002012", "20 MB", "2024-12-14", 650, 14, "Directo", "Activo", ""],
-    ["Veronica casa 30", "9841002013", "10 MB", "2025-07-22", 500, 22, "PTP", "Activo", ""]
+    { nombre: "Cresencia caraos casa P4", celular: "9842785595", megas: "5 MB", instalacion: "2025-11-02", monto: 0, estatusPago: "enCurso" },
+    { nombre: "VECINA YOLANDA CASA 15", celular: "", megas: "10 MB", instalacion: "2026-05-05", monto: 500, estatusPago: "pagado" },
+    { nombre: "Hermelinda", celular: "9841311983", megas: "10 MB", instalacion: "2024-07-05", monto: 500, estatusPago: "debe" },
+    { nombre: "MICAELA HERNANDEZ CASA 54", celular: "9671949286", megas: "10 MB", instalacion: "2026-02-07", monto: 500, estatusPago: "debe" },
+    // casa 44 LIZBETH: unico cliente de socio 'Octavio'. IP .145 por el enlace
+    // PtP CASA 44. PENDIENTE CONFIRMAR si la .145 corresponde a Lizbeth o a
+    // 'Daniel casa 44'; por nombre del diagrama ('CASA 44') se asigna aqui.
+    { nombre: "casa 44 LIZBETH", celular: "9842704365", megas: "10 MB", instalacion: "2025-11-12", monto: 500, estatusPago: "debe", socio: "Octavio", ip: "192.168.10.145", tipoConexion: "PtP", apId: RED_IDS.PTP_CASA_44 },
+    { nombre: "Daniel casa 44", celular: "9842086116", megas: "10 MB", instalacion: "2025-04-16", monto: 500, estatusPago: "debe" },
+    { nombre: "Nieto", celular: "9848062139", megas: "20 MB", instalacion: "2024-07-17", monto: 600, estatusPago: "debe", ip: "192.168.10.38", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
+    { nombre: "Lupita casa 26 alado de nieto", celular: "9982047915", megas: "20 MB", instalacion: "2025-03-21", monto: 700, estatusPago: "debe", ip: "192.168.10.111", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
+    { nombre: "Gabriela", celular: "9844491677", megas: "15 MB", instalacion: "2024-09-21", monto: 600, estatusPago: "debe" },
+    { nombre: "URIEL", celular: "9841913321", megas: "10 MB", instalacion: "2025-12-25", monto: 500, estatusPago: "debe" },
+    { nombre: "Reyes vecino", celular: "9841163234", megas: "30 MB", instalacion: "2024-04-27", monto: 600, estatusPago: "debe", ip: "192.168.10.34", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC1 },
+    { nombre: "TIENDA INDOMABLE", celular: "9841163234", megas: "5 MB", instalacion: "2025-03-24", monto: 500, estatusPago: "debe", ip: "192.168.10.129", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
+    { nombre: "Mercedez RH", celular: "2711657112", megas: "10 MB", instalacion: "2024-04-28", monto: 400, estatusPago: "debe", ip: "192.168.10.36", tipoConexion: "PtP", apId: RED_IDS.PTP_MERCEDES_RH },
+    { nombre: "Berenice", celular: "9841417166", megas: "10 MB", instalacion: "2024-10-30", monto: 500, estatusPago: "debe", ip: "192.168.10.31", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC2 },
+    { nombre: "Jessy casa 43", celular: "", megas: "5 MB", instalacion: "2025-02-24", monto: 500, estatusPago: "debe", ip: "192.168.10.40", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC1 },
+    { nombre: "Obed", celular: "9841564118", megas: "10 MB", instalacion: "2024-07-27", monto: 500, estatusPago: "debe" },
+    { nombre: "VECINO DE BRANDON", celular: "", megas: "10 MB", instalacion: "2026-03-28", monto: 500, estatusPago: "debe" },
+    { nombre: "CASA 17 CARMEN LAVANDERIA", celular: "9841003920", megas: "10 MB", instalacion: "2026-09-16", monto: 500, estatusPago: "debe" }
   ];
 
   /**
@@ -1135,44 +1202,43 @@
   function construirSeed() {
     var hoy = new Date();
     var clientes = SEED_RAW.map(function (fila) {
-      var fechaInstalacion = fila[3];
-      var diaPago = fila[5];
-      var ultimoPago = fila[8];
-
       var cliente = crearCliente({
-        nombre: fila[0],
-        celular: fila[1],
-        direccion: "Col. Centro, calle de ejemplo",
-        ip: ipEjemplo(),
-        megas: fila[2],
-        monto: fila[4],
-        fechaInstalacion: fechaInstalacion,
-        diaPago: diaPago,
-        tipoPago: fila[6],
-        estatus: fila[7],
-        ultimoPago: ultimoPago,
-        socio: fila[9] // undefined para la mayoria -> 'Carlos' por default
+        nombre: fila.nombre,
+        celular: fila.celular,
+        direccion: "", // ubicacion real no provista; dejar generica/vacia
+        ip: fila.ip || "",
+        tipoConexion: fila.tipoConexion || "",
+        apId: fila.apId || "",
+        megas: fila.megas,
+        monto: fila.monto,
+        fechaInstalacion: fila.instalacion,
+        // diaPago se deriva de la fecha de instalacion en crearCliente.
+        tipoPago: "Directo", // default financiero para todos (ver nota del SEED)
+        estatus: "Activo",   // todos Activos por ahora
+        socio: fila.socio    // undefined -> 'Carlos' por default
       });
+      // Guardar la marca de pago de la fila para aplicarEscenarios (no se
+      // persiste como campo del cliente; se consume y descarta abajo).
+      cliente._estatusPago = fila.estatusPago;
       return cliente;
     });
 
-    // Forzar escenarios de prueba deterministas en los primeros clientes:
-    //  - ~3 vencidos (vencimiento en el pasado, sin pago del ciclo)
-    //  - algunos proximos (dentro de la ventana de aviso)
-    //  - algunos pagados (ultimoPago cubre un ciclo futuro)
+    // Aplicar la interpretacion de pago (al corriente vs vencido) segun la
+    // marca de la fila, sin depender de indices fijos del dataset.
     aplicarEscenarios(clientes, hoy);
+
+    // Limpiar la marca auxiliar antes de devolver/persistir.
+    clientes.forEach(function (c) { delete c._estatusPago; });
     return clientes;
   }
 
-  var _ipSeq = 100;
-  function ipEjemplo() {
-    _ipSeq += 1;
-    return "192.168.1." + _ipSeq;
-  }
-
   /**
-   * aplicarEscenarios: fija fechaProximoPago/ultimoPago para que el
-   * dataset muestre vencidos, proximos y pagados de forma predecible.
+   * aplicarEscenarios: fija fechaProximoPago/ultimoPago para que el dataset
+   * refleje la interpretacion de pago confirmada por el usuario, usando la
+   * marca '_estatusPago' de cada cliente (no indices magicos):
+   *  - 'debe'    => vencido: fechaProximoPago en el pasado, sin ultimoPago.
+   *  - 'pagado'  => al corriente: ultimoPago reciente, proximo pago futuro.
+   *  - 'enCurso' => recien instalado al corriente: proximo pago futuro.
    */
   function aplicarEscenarios(clientes, hoy) {
     function en(dias) {
@@ -1181,44 +1247,21 @@
       return fechaISO(d);
     }
 
-    if (clientes[2]) {
-      // Hermelinda -> VENCIDO hace 5 dias
-      clientes[2].fechaProximoPago = en(-5);
-      clientes[2].ultimoPago = "";
-    }
-    if (clientes[13]) {
-      // Berenice -> VENCIDO hace 8 dias (en la tabla aparece "debe")
-      clientes[13].fechaProximoPago = en(-8);
-      clientes[13].ultimoPago = "";
-    }
-    if (clientes[15]) {
-      // Obed -> VENCIDO hace 2 dias (en la tabla aparece "debe")
-      clientes[15].fechaProximoPago = en(-2);
-      clientes[15].ultimoPago = "";
-    }
-    if (clientes[14]) {
-      // Jessy casa 43 -> VENCIDO hace 1 dia (en la tabla aparece "debe")
-      clientes[14].fechaProximoPago = en(-1);
-      clientes[14].ultimoPago = "";
-    }
-    if (clientes[5]) {
-      // Daniel casa 44 -> PROXIMO (vence manana)
-      clientes[5].fechaProximoPago = en(1);
-    }
-    if (clientes[7]) {
-      // Lupita casa 26 -> PROXIMO (vence en 3 dias)
-      clientes[7].fechaProximoPago = en(3);
-    }
-    if (clientes[0]) {
-      // Cresencia -> PAGADO (vence en 25 dias y tiene ultimo pago)
-      clientes[0].fechaProximoPago = en(25);
-      clientes[0].ultimoPago = en(-5);
-    }
-    if (clientes[17]) {
-      // CARMEN LAVAND -> PAGADO (vence en 20 dias con pago registrado)
-      clientes[17].fechaProximoPago = en(20);
-      clientes[17].ultimoPago = en(-10);
-    }
+    clientes.forEach(function (c) {
+      if (c._estatusPago === "debe") {
+        // Vencido: ciclo sin cubrir, vencimiento ya pasado.
+        c.fechaProximoPago = en(-7);
+        c.ultimoPago = "";
+      } else if (c._estatusPago === "pagado") {
+        // Al corriente: pago reciente y proximo vencimiento a futuro.
+        c.ultimoPago = en(-5);
+        c.fechaProximoPago = en(25);
+      } else if (c._estatusPago === "enCurso") {
+        // Recien instalado y al corriente: proximo vencimiento a futuro.
+        c.ultimoPago = en(-3);
+        c.fechaProximoPago = en(27);
+      }
+    });
   }
 
   /* ----------------------------------------------------------
@@ -1290,6 +1333,11 @@
     // Modelo
     crearCliente: crearCliente,
     generarId: generarId,
+
+    // Topologia de red (reutilizada por el mapa en FEAT-003)
+    RED_IDS: RED_IDS,
+    TIPOS_CONEXION: TIPOS_CONEXION,
+    TOPOLOGIA: TOPOLOGIA,
 
     // Calculos de negocio
     calcularProximoPago: calcularProximoPago,
