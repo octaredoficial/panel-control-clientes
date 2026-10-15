@@ -1298,11 +1298,36 @@
   /**
    * reiniciarDatosEjemplo: fuerza el reemplazo de los datos por el SEED.
    * Usado luego por la pantalla de Configuracion (FEAT-003).
+   *
+   * IMPORTANTE: escribe a traves de las PROPIEDADES del namespace
+   * (PCC.guardarClientes / PCC.guardarMovimientos / PCC.guardarConfig),
+   * NO de los closures internos. firebase-sync.js parchea esas propiedades
+   * para espejar a Firestore; si usaramos los closures internos el reinicio
+   * solo tocaria localStorage y los 18 clientes NO llegarian a la nube.
+   * Con las propiedades parcheadas, "Reiniciar datos de ejemplo" sobrescribe
+   * clientes y vacia movimientos tambien en Firestore. Si el namespace aun
+   * no esta disponible (p. ej. durante el arranque del nucleo), caemos a los
+   * closures internos para no romper. El flag _aplicandoSnapshot interno de
+   * firebase-sync sigue evitando reenviar snapshots remotos (no hay bucle).
    */
   function reiniciarDatosEjemplo() {
-    guardarClientes(construirSeed());
-    guardarMovimientos([]);
-    guardarConfig(clonar(CONFIG_DEFAULT));
+    var ns = typeof PCC !== "undefined" && PCC ? PCC : null;
+    var setClientes =
+      ns && typeof ns.guardarClientes === "function"
+        ? ns.guardarClientes
+        : guardarClientes;
+    var setMovimientos =
+      ns && typeof ns.guardarMovimientos === "function"
+        ? ns.guardarMovimientos
+        : guardarMovimientos;
+    var setConfig =
+      ns && typeof ns.guardarConfig === "function"
+        ? ns.guardarConfig
+        : guardarConfig;
+
+    setClientes(construirSeed());
+    setMovimientos([]);
+    setConfig(clonar(CONFIG_DEFAULT));
     return true;
   }
 
@@ -2568,9 +2593,11 @@
     if (!nombre) {
       errores.push("El nombre es obligatorio.");
     }
-    if (!celular.replace(/\D+/g, "")) {
-      errores.push("El celular es obligatorio.");
-    }
+    // El celular es OPCIONAL: varios clientes reales se siembran sin numero
+    // (p. ej. Yolanda casa 15, Jessy casa 43, Vecino de Brandon) y deben
+    // poder abrirse desde el mapa para asignarles IP/AP sin inventar datos.
+    // Si viene vacio se guarda como "" (WhatsApp quedara deshabilitado para
+    // ese cliente). Obligatorios: nombre, monto y dia de pago.
     if (montoRaw === "" || isNaN(Number(montoRaw)) || Number(montoRaw) < 0) {
       errores.push("El monto debe ser un número válido.");
     }
@@ -2791,9 +2818,12 @@
   }
 
   function exportarCSV() {
+    // Las dos ultimas columnas (Tipo de conexión / AP o enlace) se anaden al
+    // final para NO romper el orden de las columnas existentes.
     var cabeceras = [
       "Nombre", "Celular", "Dirección", "IP", "Megas", "Monto",
-      "Fecha instalación", "Día de pago", "Tipo", "Estatus", "Próximo pago"
+      "Fecha instalación", "Día de pago", "Tipo", "Estatus", "Próximo pago",
+      "Tipo de conexión", "AP o enlace"
     ];
     var filas = [cabeceras.map(escaparCSV).join(",")];
     clientes().forEach(function (c) {
@@ -2808,7 +2838,9 @@
         c.diaPago,
         c.tipoPago,
         c.estatus,
-        c.fechaProximoPago ? PCC.formatoFechaCorta(c.fechaProximoPago) : ""
+        c.fechaProximoPago ? PCC.formatoFechaCorta(c.fechaProximoPago) : "",
+        c.tipoConexion || "",
+        c.apId || ""
       ];
       filas.push(fila.map(escaparCSV).join(","));
     });

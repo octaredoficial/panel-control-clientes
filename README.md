@@ -126,7 +126,7 @@ Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-
   - **Editar**: abre el formulario del cliente con sus datos cargados.
   - **Pausar / Reanudar**: alterna el estatus del cliente.
   - **Eliminar**: pide confirmación antes de borrar.
-- **Nuevo Cliente**: formulario con validación en español (nombre, celular, monto y día de pago son obligatorios). Incluye el campo **Pagado a** (ver [el campo "socio"](#el-campo-socio-pagado-a)).
+- **Nuevo Cliente**: formulario con validación en español (**nombre, monto y día de pago** son obligatorios; el **celular es opcional**, para poder registrar clientes sin número, como varios de los 18 reales, y asignarles IP/AP desde su ficha). Incluye el campo **Pagado a** (ver [el campo "socio"](#el-campo-socio-pagado-a)).
 - **Movimientos**: registrar **Gastos**, **Ingresos** y **Ahorros**. El panel de detalle tiene pestañas que filtran por tipo, calculan el total del mes y muestran un estado vacío adecuado.
 - **Modo oscuro**: el botón 🌙 / ☀️ alterna el tema y lo recuerda al recargar.
 - **Configuración**: ajusta los **días de aviso**, la **moneda** y los **gastos fijos del negocio** (ver [Gastos fijos configurables](#gastos-fijos-configurables)), y permite **reiniciar los datos de ejemplo**.
@@ -281,7 +281,7 @@ Puedes editar, pausar, borrar o completar los datos de cada cliente (incluidos l
 1. Abre **Configuración** (botón ⚙️ en la parte superior).
 2. Pulsa **Reiniciar datos de ejemplo** y confirma.
 
-Esta acción **sobrescribe en la nube** todos los **clientes** y **movimientos** actuales con los **18 clientes reales**. Como se sincroniza con Firestore, el cambio se refleja en todos los dispositivos con la sesión abierta.
+Esta acción **sobrescribe en la nube** todos los **clientes** y **movimientos** actuales con los **18 clientes reales** (deja la lista de movimientos vacía). El reinicio escribe a través de los mismos **setters** que la app usa para crear o editar, así que **se propaga a Firestore** y el cambio se refleja en todos los dispositivos con la sesión abierta.
 
 > **Advertencia:** reiniciar **borra los datos previos** (los clientes y movimientos de ejemplo que hubiera) y los reemplaza por los 18 reales. Hazlo solo cuando quieras partir de ese conjunto limpio.
 

@@ -1465,16 +1465,23 @@ body {
 }
 
 /* Variantes de color (borde izquierdo + chip de color de fondo suave). */
+/* Nota: el tinte de fondo usa color-mix. Se declara primero un color solido
+   (var(--superficie)) como fallback: los navegadores sin soporte de color-mix
+   ignoran la regla invalida y conservan el fondo solido; el borde izquierdo
+   de color ya distingue cada tipo de nodo. */
 .red-nodo--core {
   border-left-color: var(--red-core);
+  background: var(--superficie);
   background: color-mix(in srgb, var(--red-core) 12%, var(--superficie));
 }
 .red-nodo--ap {
   border-left-color: var(--red-ap);
+  background: var(--superficie);
   background: color-mix(in srgb, var(--red-ap) 10%, var(--superficie));
 }
 .red-nodo--ptp {
   border-left-color: var(--red-ptp);
+  background: var(--superficie);
   background: color-mix(in srgb, var(--red-ptp) 10%, var(--superficie));
 }
 .red-nodo--identificado {
@@ -1482,6 +1489,7 @@ body {
 }
 .red-nodo--pendiente {
   border-left-color: var(--red-pendiente);
+  background: var(--superficie);
   background: color-mix(in srgb, var(--red-pendiente) 10%, var(--superficie));
 }
 .red-nodo--modem {
