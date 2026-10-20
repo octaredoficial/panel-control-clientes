@@ -94,9 +94,14 @@ enviará el array completo al parchear los setters de `PCC`.
 
 ### Estáticos
 
-Cualquier ruta que no empiece por `/api/` ni sea `/ws` sirve el frontend
-(`index.html`, `app.js`, `red-mapa.js`, `styles.css`, el módulo de sync, etc.)
-desde la raíz del repositorio, con protección contra *path traversal*.
+El servidor sirve **solo** los cinco archivos del frontend mediante una lista
+blanca: `index.html`, `app.js`, `red-mapa.js`, `styles.css` y `backend-sync.js`.
+Cualquier otra ruta GET/HEAD que no empiece por `/api/` ni sea `/ws` cae al
+*fallback* del SPA (devuelve `index.html`). Como el backend vive en `server/`
+bajo la misma raíz del repo, esta lista blanca evita que `/server/auth.js`,
+`/server/server.js`, etc. sean descargables sin autenticación (antes se
+exponía el diseño de sesión). Además hay protección contra *path traversal*
+comparando contra `staticDir + separador`.
 
 ## Estructura
 

@@ -96,9 +96,6 @@
     }
   }
 
-  // El overlay arranca visible (bloquea hasta que haya sesion).
-  mostrarOverlay();
-
   var PCC = window.PCC;
   if (!PCC) {
     mostrarError(
@@ -393,9 +390,17 @@
   /* --------------------------------------------------------
      Arranque / parada de la sincronizacion.
      -------------------------------------------------------- */
-  function iniciarSincronizacion() {
+  // Arranca la sincronizacion. Si ya traemos el estado inicial (por ejemplo
+  // de la sonda de sesion en la carga), lo pasamos en `estadoInicial` para
+  // no repetir el GET /api/state.
+  function iniciarSincronizacion(estadoInicial) {
     _cerradoPorUsuario = false;
     parchearSeters();
+    if (estadoInicial && typeof estadoInicial === "object") {
+      aplicarSnapshot(estadoInicial);
+      abrirWebSocket();
+      return;
+    }
     // Carga inicial (equivalente a getDocs de Firestore) y luego el WS.
     apiFetch("/api/state")
       .then(function (resp) {
@@ -499,4 +504,36 @@
         });
     });
   }
+
+  /* --------------------------------------------------------
+     Reanudar sesion en la carga (equivalente a onAuthStateChanged de
+     firebase-sync.js). La cookie de sesion es HttpOnly (JS no la ve), asi
+     que sondeamos GET /api/state:
+       - 200: la cookie de 30 dias sigue vigente -> saltamos el overlay y
+         arrancamos la sincronizacion directamente con ese estado.
+       - 401 (o cualquier otro): no hay sesion -> mostramos el overlay para
+         que el usuario escriba la contrasena.
+     Esto recupera el "no volver a pedir contrasena en cada recarga" que daba
+     Firebase, sin cambiar el resto del flujo de login/logout/reconexion.
+     -------------------------------------------------------- */
+  function reanudarSesion() {
+    apiFetch("/api/state")
+      .then(function (resp) {
+        if (resp.ok) {
+          return resp.json().then(function (estado) {
+            ocultarOverlay();
+            iniciarSincronizacion(estado);
+          });
+        }
+        // Sin sesion valida (401) o error del servidor: pedir contrasena.
+        mostrarOverlay();
+      })
+      .catch(function () {
+        // Sin conexion con el backend: mostramos el overlay (el login
+        // reintentara y reportara el error de red si persiste).
+        mostrarOverlay();
+      });
+  }
+
+  reanudarSesion();
 })();

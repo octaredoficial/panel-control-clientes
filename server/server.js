@@ -31,6 +31,18 @@ const CABECERAS_SEGURIDAD = {
   "Referrer-Policy": "strict-origin-when-cross-origin"
 };
 
+// Lista blanca de los UNICOS archivos del frontend que el servidor expone.
+// Servir por allowlist (en vez de todo el directorio) evita filtrar el
+// codigo del backend (server/*.js), que vive bajo la misma raiz del repo.
+// Cualquier GET/HEAD fuera de esta lista cae al SPA fallback (index.html).
+const ARCHIVOS_FRONTEND = new Set([
+  "index.html",
+  "app.js",
+  "red-mapa.js",
+  "styles.css",
+  "backend-sync.js"
+]);
+
 const TIPOS_MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -124,33 +136,57 @@ export function crearServidor(opciones = {}) {
     });
   }
 
-  // --- Servir archivos estaticos ---------------------------------------
+  // Responde con index.html (fallback tipo SPA para rutas desconocidas).
+  function servirIndex(res) {
+    const indexPath = path.join(staticDir, "index.html");
+    fs.readFile(indexPath, (e2, buf) => {
+      if (e2) {
+        enviarJSON(res, 404, { error: "No encontrado" });
+        return;
+      }
+      res.writeHead(200, {
+        ...CABECERAS_SEGURIDAD,
+        "Content-Type": TIPOS_MIME[".html"]
+      });
+      res.end(buf);
+    });
+  }
+
+  // --- Servir archivos estaticos (SOLO los del frontend) ----------------
+  // Importante: el servidor vive en server/ bajo la raiz del repo, que
+  // tambien contiene el codigo del backend. Para NO exponer server/*.js (ni
+  // cualquier otro archivo del repo) sin autenticacion, servimos unicamente
+  // los archivos de la lista blanca ARCHIVOS_FRONTEND; todo lo demas cae al
+  // fallback del SPA (index.html). Asi /server/auth.js, /server/server.js,
+  // etc. nunca devuelven su contenido.
   function servirEstatico(req, res, urlPath) {
     let rel = decodeURIComponent(urlPath.split("?")[0]);
     if (rel === "/" || rel === "") rel = "/index.html";
 
-    // Normaliza y evita path traversal fuera de staticDir.
+    // Normaliza, resuelve dentro de staticDir y descarta path traversal.
     const destino = path.normalize(path.join(staticDir, rel));
-    if (!destino.startsWith(staticDir)) {
+    // Comparacion robusta: el destino debe ser el propio staticDir o un
+    // descendiente real (staticDir + separador), no un hermano que comparta
+    // prefijo de ruta (p. ej. /app vs /app-x).
+    const dentro =
+      destino === staticDir || destino.startsWith(staticDir + path.sep);
+    if (!dentro) {
       enviarJSON(res, 403, { error: "Prohibido" });
+      return;
+    }
+
+    // Allowlist: el nombre relativo (sin barra inicial) debe ser uno de los
+    // archivos del frontend. Cualquier otra ruta (incluido server/*.js) va
+    // al fallback del SPA, nunca devuelve el archivo del repo.
+    const nombreRel = rel.replace(/^\/+/, "");
+    if (!ARCHIVOS_FRONTEND.has(nombreRel)) {
+      servirIndex(res);
       return;
     }
 
     fs.stat(destino, (err, stat) => {
       if (err || !stat.isFile()) {
-        // SPA simple: desconocido no-API => index.html.
-        const indexPath = path.join(staticDir, "index.html");
-        fs.readFile(indexPath, (e2, buf) => {
-          if (e2) {
-            enviarJSON(res, 404, { error: "No encontrado" });
-            return;
-          }
-          res.writeHead(200, {
-            ...CABECERAS_SEGURIDAD,
-            "Content-Type": TIPOS_MIME[".html"]
-          });
-          res.end(buf);
-        });
+        servirIndex(res);
         return;
       }
       const ext = path.extname(destino).toLowerCase();

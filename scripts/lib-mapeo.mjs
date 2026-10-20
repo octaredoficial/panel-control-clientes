@@ -263,6 +263,13 @@ export function filaCsvACliente(fila) {
   fila = fila || {};
   const toma = (k) => String(fila[k] != null ? fila[k] : "").trim();
 
+  // Mensualidad vacia -> monto 0 (DECISION DELIBERADA, no bug). En la
+  // MIGRACION de datos reales no inventamos una cuota: si el CSV no trae
+  // Mensualidad, el cliente queda en 0 y el operador lo corrige en la ficha.
+  // Esto difiere a proposito de app.js crearCliente, que usa MONTO_DEFAULT
+  // (500) para clientes NUEVOS creados a mano en la UI (ahi 500 es un valor
+  // de arranque razonable; aqui seria inventar ingresos y sesgaria el reparto
+  // Carlos/Octavio). merge-and-seed registra montos 0 para que se revisen.
   const montoRaw = toma("Mensualidad").replace(/[$,\s]/g, "");
   const montoNum = montoRaw === "" ? 0 : Number(montoRaw);
 

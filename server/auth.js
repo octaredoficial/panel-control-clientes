@@ -50,12 +50,42 @@ export function igualdadConstante(a, b) {
  * @param {string} appPassword   Contrasena compartida (APP_PASSWORD).
  * @param {string} sessionSecret Secreto para firmar los tokens (SESSION_SECRET).
  */
+// Valores de marcador de posicion que vienen en .env.example. Si llegan a
+// produccion significa que el .env quedo a medias: fallamos ruidosamente en
+// el arranque en vez de servir un sitio con contrasena/secreto conocidos.
+const PLACEHOLDERS_PROHIBIDOS = new Set([
+  "change-me",
+  "generate-a-long-random-string"
+]);
+// Longitud minima del secreto HMAC para que la firma de sesion sea seria.
+const SESSION_SECRET_MIN_LONGITUD = 16;
+
 export function crearAuth(appPassword, sessionSecret) {
   if (!appPassword) {
     throw new Error("APP_PASSWORD es obligatoria y no esta definida.");
   }
   if (!sessionSecret) {
     throw new Error("SESSION_SECRET es obligatorio y no esta definido.");
+  }
+  if (PLACEHOLDERS_PROHIBIDOS.has(appPassword)) {
+    throw new Error(
+      "APP_PASSWORD sigue con el valor de ejemplo ('" +
+        appPassword +
+        "'). Cambiala por una contrasena real en .env."
+    );
+  }
+  if (PLACEHOLDERS_PROHIBIDOS.has(sessionSecret)) {
+    throw new Error(
+      "SESSION_SECRET sigue con el valor de ejemplo. Genera uno largo y " +
+        "aleatorio (p. ej. `openssl rand -hex 32`) y ponlo en .env."
+    );
+  }
+  if (sessionSecret.length < SESSION_SECRET_MIN_LONGITUD) {
+    throw new Error(
+      "SESSION_SECRET es demasiado corto (minimo " +
+        SESSION_SECRET_MIN_LONGITUD +
+        " caracteres). Genera uno largo y aleatorio."
+    );
   }
 
   function firmar(datos) {

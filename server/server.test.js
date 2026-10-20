@@ -11,6 +11,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 
 import { crearServidor } from "./server.js";
+import { crearAuth } from "./auth.js";
 import { aceptarClave } from "./ws.js";
 
 const APP_PASSWORD = "secreto-de-prueba";
@@ -231,6 +232,82 @@ test("estatico: sirve index.html con las cabeceras de seguridad", async () => {
   } finally {
     await inst.close();
   }
+});
+
+test("estatico (regresion): el codigo del backend NO es descargable", async () => {
+  // El servidor vive en server/ bajo la raiz del repo (staticDir). La
+  // allowlist debe impedir que /server/*.js devuelvan su contenido: cualquier
+  // ruta fuera de la lista blanca cae al fallback del SPA (index.html), nunca
+  // al archivo del backend. Esto cierra la fuga que exponia el diseno de auth.
+  const { inst, port } = await arrancarServidor();
+  try {
+    const rutas = [
+      "/server/auth.js",
+      "/server/server.js",
+      "/server/db.js",
+      "/server/ws.js",
+      "/server/index.js"
+    ];
+    for (const ruta of rutas) {
+      const resp = await pedir(port, "GET", ruta);
+      // No debe revelar el fuente: si responde 200, debe ser el HTML del SPA,
+      // nunca JavaScript del backend.
+      if (resp.status === 200) {
+        assert.equal(
+          resp.headers["content-type"],
+          "text/html; charset=utf-8",
+          "La ruta " + ruta + " devolvio algo distinto del SPA (posible fuga)"
+        );
+      } else {
+        assert.notEqual(resp.status, 200);
+      }
+    }
+  } finally {
+    await inst.close();
+  }
+});
+
+test("estatico (regresion): .env y documentos NO se sirven por allowlist", async () => {
+  const { inst, port } = await arrancarServidor();
+  try {
+    for (const ruta of ["/.env", "/README.md", "/MIGRATION.md", "/.env.example"]) {
+      const resp = await pedir(port, "GET", ruta);
+      if (resp.status === 200) {
+        assert.equal(resp.headers["content-type"], "text/html; charset=utf-8");
+      }
+    }
+  } finally {
+    await inst.close();
+  }
+});
+
+test("estatico: sirve los archivos del frontend de la allowlist", async () => {
+  const { inst, port } = await arrancarServidor();
+  try {
+    const resp = await pedir(port, "GET", "/backend-sync.js");
+    assert.equal(resp.status, 200);
+    assert.match(resp.headers["content-type"], /javascript/);
+  } finally {
+    await inst.close();
+  }
+});
+
+test("auth: rechaza APP_PASSWORD de ejemplo ('change-me') en el arranque", () => {
+  assert.throws(
+    () => crearAuth("change-me", SESSION_SECRET),
+    /APP_PASSWORD/
+  );
+});
+
+test("auth: rechaza SESSION_SECRET de ejemplo en el arranque", () => {
+  assert.throws(
+    () => crearAuth(APP_PASSWORD, "generate-a-long-random-string"),
+    /SESSION_SECRET/
+  );
+});
+
+test("auth: rechaza un SESSION_SECRET demasiado corto", () => {
+  assert.throws(() => crearAuth(APP_PASSWORD, "corto"), /corto|SESSION_SECRET/);
 });
 
 /* ------------------------------------------------------------
