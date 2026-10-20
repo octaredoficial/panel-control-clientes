@@ -375,6 +375,15 @@
       // estos campos quedan como '' -> "falta identificar".
       tipoConexion: normalizarTipoConexion(datos.tipoConexion),
       apId: datos.apId ? String(datos.apId) : "",
+      // Campos de red adicionales del CSV del usuario (FEAT-005). Son
+      // opcionales y por defecto '' para no afectar a clientes antiguos ni
+      // a la siembra. ssid/passWifi/passModem describen la configuracion
+      // WiFi/modem del cliente; ipPrincipal es la IP del equipo principal
+      // (antena/AP) distinta de la IP del cliente ('ip').
+      ssid: datos.ssid ? String(datos.ssid) : "",
+      passWifi: datos.passWifi ? String(datos.passWifi) : "",
+      passModem: datos.passModem ? String(datos.passModem) : "",
+      ipPrincipal: datos.ipPrincipal ? String(datos.ipPrincipal) : "",
       megas: datos.megas || "",
       monto: datos.monto != null ? Number(datos.monto) : MONTO_DEFAULT,
       fechaInstalacion: datos.fechaInstalacion
@@ -2605,6 +2614,11 @@
       // Campos de red (FEAT-003): tipo de conexion y AP/enlace padre.
       setValor("#cliente-tipo-conexion", cliente.tipoConexion || "");
       setValor("#cliente-ap", cliente.apId || "");
+      // Campos extra de red del CSV (FEAT-005).
+      setValor("#cliente-ssid", cliente.ssid || "");
+      setValor("#cliente-ip-principal", cliente.ipPrincipal || "");
+      setValor("#cliente-pass-wifi", cliente.passWifi || "");
+      setValor("#cliente-pass-modem", cliente.passModem || "");
     } else {
       if (titulo) {
         titulo.textContent = "Nuevo Cliente";
@@ -2665,7 +2679,12 @@
       // Campos de red (FEAT-003). crearCliente normaliza tipoConexion
       // (valores invalidos -> '') y conserva apId tal cual.
       tipoConexion: valor("#cliente-tipo-conexion"),
-      apId: valor("#cliente-ap")
+      apId: valor("#cliente-ap"),
+      // Campos extra de red del CSV (FEAT-005).
+      ssid: (valor("#cliente-ssid") || "").trim(),
+      ipPrincipal: (valor("#cliente-ip-principal") || "").trim(),
+      passWifi: (valor("#cliente-pass-wifi") || "").trim(),
+      passModem: (valor("#cliente-pass-modem") || "").trim()
     };
 
     var lista = clientes();

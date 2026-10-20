@@ -487,6 +487,30 @@
           </div>
         </div>
 
+        <!-- Campos extra de red del CSV (FEAT-005): SSID, contraseñas y la
+             IP del equipo principal (antena/AP). Todos opcionales. -->
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-ssid">SSID (WiFi)</label>
+            <input type="text" id="cliente-ssid" name="ssid" class="campo" placeholder="Nombre de red WiFi" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-ip-principal">IP Principal</label>
+            <input type="text" id="cliente-ip-principal" name="ipPrincipal" class="campo" placeholder="192.168.10.1" />
+          </div>
+        </div>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-pass-wifi">Pass WiFi</label>
+            <input type="text" id="cliente-pass-wifi" name="passWifi" class="campo" placeholder="Contraseña WiFi" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="cliente-pass-modem">Pass Modem</label>
+            <input type="text" id="cliente-pass-modem" name="passModem" class="campo" placeholder="Contraseña del módem" />
+          </div>
+        </div>
+
         <div class="campo-fila">
           <div class="campo-grupo">
             <label class="campo-label" for="cliente-megas">Megas</label>

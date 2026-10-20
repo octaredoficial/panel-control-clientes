@@ -230,6 +230,169 @@ Luego, en el navegador (dos pestañas contra el **mismo** backend):
 
 ---
 
+## 3.7 Migración de datos (FEAT-005): runbook completo
+
+La migración reconcilia **dos fuentes** en el nuevo SQLite, sin perder ningún
+campo:
+
+1. El **CSV del usuario** (~29 clientes) con campos más ricos que el formulario
+   actual.
+2. Lo que haya hoy en **Firestore** (proyecto `panel-clientes-12a4a`).
+
+Como el sandbox no alcanza Firestore ni recibe el CSV, esta feature **produce las
+herramientas** que **corre el usuario** y **extiende el esquema de cliente** para
+guardar los campos nuevos.
+
+### 3.7.1 Extensión del esquema de cliente
+
+`crearCliente` en `app.js` ahora acepta y rellena por defecto cuatro campos
+**opcionales** (todos `''` por defecto, así los clientes antiguos y la siembra no
+se ven afectados):
+
+| Campo         | Origen CSV     | Uso |
+| ------------- | -------------- | --- |
+| `ssid`        | `SSID`         | Nombre de la red WiFi del cliente |
+| `passWifi`    | `Pass WiFi`    | Contraseña del WiFi |
+| `passModem`   | `Pass Modem`   | Contraseña del módem |
+| `ipPrincipal` | `IP Principal` | IP del equipo principal (antena/AP), distinta de `ip` |
+
+La **ficha del cliente** (`#form-cliente` en `index.html`) expone inputs para los
+cuatro (`#cliente-ssid`, `#cliente-pass-wifi`, `#cliente-pass-modem`,
+`#cliente-ip-principal`) y `app.js` los lee/escribe igual que el resto de campos.
+**Ningún campo existente se renombró ni se eliminó.**
+
+### 3.7.2 Columnas del CSV y su mapeo
+
+Cabeceras EXACTAS esperadas en la primera fila del CSV (13 columnas):
+
+```
+Nombre, Telefono, Direccion, Plan, Mensualidad, Proximo Pago, Estado,
+Tipo Internet, IP Cliente, IP Principal, SSID, Pass WiFi, Pass Modem
+```
+
+| Columna CSV     | Campo cliente      | Notas de mapeo |
+| --------------- | ------------------ | -------------- |
+| `Nombre`        | `nombre`           | |
+| `Telefono`      | `celular`          | opcional |
+| `Direccion`     | `direccion`        | |
+| `Plan`          | `megas`            | texto tal cual (p. ej. "10 MB") |
+| `Mensualidad`   | `monto` (number)   | se limpian `$`, comas y espacios |
+| `Proximo Pago`  | `fechaProximoPago` | `dd/mm/aaaa`, `dd-mm-aaaa`, `aaaa-mm-dd` o `dd/mm/aa` → ISO |
+| `Estado`        | `estatus`          | `pausad/suspend/inactiv/cortad/baja/moroso` → `Pausado`; resto → `Activo` |
+| `Tipo Internet` | `tipoConexion`     | `ptp/enlace`→`PtP`; `modem/cable/directo/fibra`→`Modem`; `ap/ptmp/antena/inalámbr/wifi`→`AP`; desconocido→`''` |
+| `IP Cliente`    | `ip`               | |
+| `IP Principal`  | `ipPrincipal`      | campo nuevo |
+| `SSID`          | `ssid`             | campo nuevo |
+| `Pass WiFi`     | `passWifi`         | campo nuevo |
+| `Pass Modem`    | `passModem`        | campo nuevo |
+
+Las **13 columnas** se mapean; no se descarta ninguna. Campos del modelo sin
+columna en el CSV (`apId`, `socio`, `diaPago`, `fechaInstalacion`,
+`ultimoPago`, `tipoPago`) quedan con sus valores por defecto y, si el cliente
+también existe en Firestore, se completan desde allí (ver regla de
+reconciliación).
+
+### 3.7.3 Regla de reconciliación (CSV ↔ Firestore)
+
+Implementada y probada en `scripts/lib-mapeo.mjs` (`reconciliarClientes`):
+
+- **Cotejo:** por `IP Cliente` (campo `ip`) si ambos la tienen; si no, por
+  **nombre normalizado** (minúsculas, sin acentos, sin espacios repetidos).
+- **Campos ricos** (`ssid`, `passWifi`, `passModem`, `ipPrincipal`, `megas`,
+  `monto`, `direccion`, `celular`, `tipoConexion`): **gana el CSV** cuando trae
+  valor; si el CSV lo deja vacío, se conserva el de Firestore.
+- **Campos derivados del historial de pagos** (`fechaProximoPago`, `ultimoPago`,
+  `diaPago`, `apId`, `socio`, `fechaInstalacion`, `tipoPago`): **gana Firestore**
+  cuando trae valor.
+- **`id`:** si hay par, se conserva el **id de Firestore** (para no romper las
+  referencias `clienteId` de los movimientos); si el cliente solo está en el CSV,
+  se usa el id generado por el importador.
+- **Nunca** se descarta un cliente presente en una sola fuente.
+- **`movimientos`, `config` y `theme`** vienen **solo de Firestore**.
+
+Todo conflicto (mismo campo con valores distintos) se **imprime** en el resumen;
+nunca se borra en silencio.
+
+### 3.7.4 Orden de operaciones (lo que corre el usuario)
+
+Correr desde el directorio del repo, en la máquina del usuario (no en el sandbox):
+
+**Paso 1 — Exportar Firestore** (necesita internet + credenciales):
+
+```bash
+npm i firebase-admin            # solo para el export
+export GOOGLE_APPLICATION_CREDENTIALS=/ruta/al/serviceAccount.json
+node scripts/export-firestore.mjs      # escribe export.json
+```
+
+Descarga el `serviceAccount.json` desde la consola de Firebase
+(Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada).
+
+> **Respalda `export.json`** en un lugar seguro **antes** de desmantelar Firebase.
+> Es tu única copia de la base de datos actual.
+
+**Paso 2 — Importar el CSV**: coloca el CSV del usuario en el repo (p. ej.
+`clientes.csv`, con las 13 cabeceras de 3.7.2) y:
+
+```bash
+node scripts/import-csv.mjs clientes.csv     # escribe clientes-from-csv.json
+```
+
+**Paso 3 — Reconciliar y sembrar** en el backend ya corriendo (ver DEPLOY.md).
+Primero en seco para revisar el resumen y el dataset final:
+
+```bash
+node scripts/merge-and-seed.mjs \
+  --firestore export.json \
+  --csv clientes-from-csv.json \
+  --out dataset-final.json \
+  --dry-run
+```
+
+Si el resumen (emparejados / solo-CSV / solo-Firestore / conflictos) se ve bien,
+carga de verdad al backend:
+
+```bash
+node scripts/merge-and-seed.mjs \
+  --firestore export.json \
+  --csv clientes-from-csv.json \
+  --base-url https://64.177.92.121 \
+  --password "TU_APP_PASSWORD" \
+  --insecure        # acepta el certificado autofirmado de Caddy por IP
+```
+
+`merge-and-seed.mjs` hace `POST /api/login` y luego `PUT /api/clientes`,
+`PUT /api/movimientos`, `PUT /api/config` y `PUT /api/theme`
+(reemplazo de colección completa, el mismo contrato que usa `backend-sync.js`).
+
+### 3.7.5 Verificar los conteos tras la carga
+
+1. En la terminal, el resumen de `merge-and-seed.mjs` imprime
+   `Clientes finales` y `Movimientos (FS)`; compáralos con los esperados
+   (~29 clientes).
+2. Comprueba el estado del backend directamente:
+
+   ```bash
+   # login y guardar la cookie
+   curl -k -i -X POST https://64.177.92.121/api/login \
+     -H 'Content-Type: application/json' -d '{"password":"TU_APP_PASSWORD"}'
+   # luego, con la cookie Set-Cookie devuelta:
+   curl -k https://64.177.92.121/api/state -H 'Cookie: pcc_session=...'
+   ```
+
+   Verifica que `clientes`, `movimientos`, `config` y `theme` tengan los conteos
+   esperados y que un cliente del CSV conserve `ssid`/`passWifi`/`passModem`/
+   `ipPrincipal`.
+3. Abre la app en el navegador, entra con la contraseña y abre la ficha de un
+   cliente migrado: los campos SSID / Pass WiFi / Pass Modem / IP Principal deben
+   aparecer poblados.
+
+> **Datos reales fuera de git.** `export.json`, `clientes-from-csv.json`,
+> `dataset-final.json` y cualquier CSV con datos de clientes **no se versionan**
+> (ver `.gitignore`); son archivos de trabajo locales del usuario.
+
+---
+
 ## 4. Alcance explícito de FEAT-001
 - **Sí:** línea base de pruebas (documentada), verificación de toolchain, y este ADR.
 - **No:** ningún cambio en `app.js`, `index.html`, `firebase-sync.js`, `styles.css` ni

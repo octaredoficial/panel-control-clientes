@@ -16,3 +16,10 @@ node_modules/
 server/*.sqlite
 server/*.sqlite-shm
 server/*.sqlite-wal
+
+# Archivos de trabajo de la migracion con datos reales de clientes (FEAT-005).
+# Son locales del usuario; nunca se versionan.
+export.json
+clientes-from-csv.json
+dataset-final.json
+*.csv
