@@ -1,37 +1,35 @@
 /* ============================================================
-   scripts/merge-and-seed.mjs  (FEAT-005)
+   scripts/merge-and-seed.mjs
    ------------------------------------------------------------
-   Reconcilia el export de Firestore (export.json) con los clientes del
-   CSV (clientes-from-csv.json) y carga el resultado en el backend
-   autohospedado via su API REST (login + PUT), o lo escribe a disco en
-   modo --dry-run para revisarlo antes.
+   Carga desde cero del CSV: toma los clientes ya mapeados por
+   import-csv.mjs (clientes-from-csv.json) y los carga en el backend
+   autohospedado via su API REST (login + PUT), o los escribe a disco en
+   modo --dry-run para revisarlos antes.
 
-   Regla de reconciliacion (ver lib-mapeo.reconciliarClientes):
-     - Cotejo por "IP Cliente" (campo ip) y, si no, por nombre normalizado.
-     - Campos ricos (ssid/passWifi/passModem/ipPrincipal/megas/monto/
-       direccion/celular/tipoConexion): gana el CSV si trae valor.
-     - Campos de historial (fechaProximoPago/ultimoPago/diaPago/apId/socio):
-       gana Firestore si trae valor.
-     - Nunca se descarta un cliente presente en una sola fuente.
-     - movimientos, config y theme vienen SOLO de Firestore (export.json).
+   Firestore quedo ABANDONADO: ya no hay reconciliacion ni export.json.
+   El dataset se arma desde cero:
+     - clientes:    los del CSV, tal cual (valores literales, sin limpiar).
+     - movimientos: arreglo vacio (el historial arranca limpio).
+     - config:      minima, con nombreNegocio 'OCTARED'; el resto de las
+                    claves las completa el backend/app con sus defaults.
+     - theme:       'claro'.
 
    Solo usa modulos integrados de Node (fetch nativo en Node 18+/22).
 
    Uso tipico (desde el directorio del repo, con el backend corriendo):
      node scripts/merge-and-seed.mjs \
-       --firestore export.json \
        --csv clientes-from-csv.json \
        --base-url https://64.177.92.121 \
-       --password "TU_APP_PASSWORD"
+       --password "TU_APP_PASSWORD" \
+       --insecure
 
    Opciones:
-     --firestore <ruta>   export.json (opcional; si falta, solo CSV)
-     --csv <ruta>         clientes-from-csv.json (opcional; si falta, solo FS)
+     --csv <ruta>         clientes-from-csv.json (por defecto ese nombre)
      --base-url <url>     URL del backend (por defecto http://localhost:8080)
      --password <pass>    APP_PASSWORD (o variable de entorno APP_PASSWORD)
      --out <ruta>         escribe el dataset final a un archivo (siempre util)
-     --dry-run            NO envia nada al backend: solo reconcilia, imprime
-                          el resumen y (si --out) escribe el JSON final
+     --dry-run            NO envia nada al backend: solo arma el dataset,
+                          imprime el resumen y (si --out) escribe el JSON
      --insecure           acepta el certificado autofirmado (HTTPS por IP)
 
    NOTA sobre el certificado autofirmado: al apuntar a https://<IP> con
@@ -40,7 +38,6 @@
    ============================================================ */
 
 import fs from "node:fs";
-import { reconciliarClientes } from "./lib-mapeo.mjs";
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -76,54 +73,36 @@ async function main() {
   const password = args.password || process.env.APP_PASSWORD || "";
   const dryRun = Boolean(args["dry-run"]);
   const out = args.out;
+  const rutaCsv = args.csv || "clientes-from-csv.json";
 
   if (args.insecure) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   }
 
-  const exportFs = leerJSON(args.firestore);
-  const clientesCsv = leerJSON(args.csv);
-
-  const fsClientes = (exportFs && exportFs.clientes) || [];
-  const fsMovimientos = (exportFs && exportFs.movimientos) || [];
-  const fsConfig = exportFs ? exportFs.config || null : null;
-  const fsTheme = (exportFs && exportFs.theme) || "claro";
-  const csvClientes = Array.isArray(clientesCsv) ? clientesCsv : [];
-
-  if (!exportFs && !clientesCsv) {
+  const clientesCsv = leerJSON(rutaCsv);
+  if (!Array.isArray(clientesCsv)) {
     console.error(
-      "[merge-and-seed] No hay fuentes de datos. Pasa --firestore y/o --csv."
+      `[merge-and-seed] No pude leer un arreglo de clientes desde ${rutaCsv}.` +
+        " Corre primero import-csv.mjs."
     );
     process.exit(1);
   }
 
-  const { clientes, resumen } = reconciliarClientes(csvClientes, fsClientes);
+  // Dataset desde cero: clientes del CSV, historial vacio y config minima.
+  const clientes = clientesCsv;
+  const movimientos = [];
+  const config = { nombreNegocio: "OCTARED" };
+  const theme = "claro";
 
-  // Resumen legible.
-  console.log("[merge-and-seed] Resumen de reconciliacion:");
-  console.log(`  CSV:              ${resumen.totalCsv}`);
-  console.log(`  Firestore:        ${resumen.totalFirestore}`);
-  console.log(`  Emparejados:      ${resumen.emparejados}`);
-  console.log(`  Solo en CSV:      ${resumen.soloCsv}`);
-  console.log(`  Solo en Firestore:${resumen.soloFirestore}`);
-  console.log(`  Clientes finales: ${clientes.length}`);
-  console.log(`  Movimientos (FS): ${fsMovimientos.length}`);
-  if (resumen.conflictos.length) {
-    console.log(`  Conflictos (gano CSV): ${resumen.conflictos.length}`);
-    for (const c of resumen.conflictos) {
-      console.log(
-        `    - ${c.nombre} [${c.campo}] firestore="${c.firestore}" csv="${c.csv}"`
-      );
-    }
-  }
+  // Resumen legible (solo cuenta de clientes; sin Firestore/reconcile).
+  console.log("[merge-and-seed] Carga desde cero del CSV:");
+  console.log(`  Clientes:    ${clientes.length}`);
+  console.log(`  Movimientos: ${movimientos.length} (arranca vacio)`);
+  console.log(`  Negocio:     ${config.nombreNegocio}`);
+  console.log(`  Theme:       ${theme}`);
 
   if (out) {
-    const dataset = {
-      clientes,
-      movimientos: fsMovimientos,
-      config: fsConfig,
-      theme: fsTheme
-    };
+    const dataset = { clientes, movimientos, config, theme };
     fs.writeFileSync(out, JSON.stringify(dataset, null, 2) + "\n", "utf8");
     console.log(`[merge-and-seed] Dataset final escrito en ${out}`);
   }
@@ -169,16 +148,14 @@ async function main() {
   await put(baseUrl, "/api/clientes", clientes, headers);
   console.log(`[merge-and-seed] PUT /api/clientes (${clientes.length})`);
 
-  await put(baseUrl, "/api/movimientos", fsMovimientos, headers);
-  console.log(`[merge-and-seed] PUT /api/movimientos (${fsMovimientos.length})`);
+  await put(baseUrl, "/api/movimientos", movimientos, headers);
+  console.log(`[merge-and-seed] PUT /api/movimientos (${movimientos.length})`);
 
-  if (fsConfig && typeof fsConfig === "object") {
-    await put(baseUrl, "/api/config", fsConfig, headers);
-    console.log("[merge-and-seed] PUT /api/config");
-  }
+  await put(baseUrl, "/api/config", config, headers);
+  console.log("[merge-and-seed] PUT /api/config");
 
-  await put(baseUrl, "/api/theme", { valor: fsTheme }, headers);
-  console.log(`[merge-and-seed] PUT /api/theme (${fsTheme})`);
+  await put(baseUrl, "/api/theme", { valor: theme }, headers);
+  console.log(`[merge-and-seed] PUT /api/theme (${theme})`);
 
   console.log("[merge-and-seed] Carga completada.");
 }

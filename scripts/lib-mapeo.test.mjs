@@ -1,5 +1,5 @@
 /* ============================================================
-   scripts/lib-mapeo.test.mjs  (FEAT-005)
+   scripts/lib-mapeo.test.mjs
    ------------------------------------------------------------
    Pruebas de la logica PURA de migracion (node:test, sin dependencias
    ni archivos/red reales). Cubre:
@@ -7,8 +7,8 @@
      - filaCsvACliente: mapeo de las 13 columnas, fecha dd/mm/aaaa,
        Estado, Tipo Internet, y preservacion de SSID/passWifi/passModem/
        ipPrincipal
-     - reconciliarClientes: conserva clientes de una sola fuente y
-       aplica la preferencia documentada por campo en conflicto
+     - carga LITERAL: IPs sucias se conservan verbatim (sin limpieza)
+     - el cliente mapeado NO lleva socio ni tipoPago (campos eliminados)
 
    Correr:  node --test   (desde scripts/ o con la ruta al archivo)
    ============================================================ */
@@ -21,8 +21,7 @@ import {
   filaCsvACliente,
   normalizarTipoInternet,
   parsearEstado,
-  parsearFechaISO,
-  reconciliarClientes
+  parsearFechaISO
 } from "./lib-mapeo.mjs";
 
 test("parsearCSV maneja comillas, comas internas y comillas escapadas", () => {
@@ -108,81 +107,26 @@ test("filaCsvACliente: Mensualidad vacia -> 0 y Estado vacio -> Activo", () => {
   assert.equal(c.ssid, "");
 });
 
-test("reconciliarClientes conserva clientes de una sola fuente", () => {
-  const csv = [filaCsvACliente({ Nombre: "Solo CSV", "IP Cliente": "10.0.0.9" })];
-  const fs = [
-    { id: "fs1", nombre: "Solo Firestore", ip: "10.0.0.1", monto: 300 }
-  ];
-  const { clientes, resumen } = reconciliarClientes(csv, fs);
-  assert.equal(clientes.length, 2);
-  assert.equal(resumen.soloCsv, 1);
-  assert.equal(resumen.soloFirestore, 1);
-  assert.equal(resumen.emparejados, 0);
-  const nombres = clientes.map((c) => c.nombre).sort();
-  assert.deepEqual(nombres, ["Solo CSV", "Solo Firestore"]);
+test("filaCsvACliente carga IPs sucias LITERALMENTE (sin limpieza)", () => {
+  // Carga desde cero: los valores del CSV se toman verbatim; solo se
+  // recorta el espacio EXTERIOR via toma(), nunca el texto interno.
+  const fila = {
+    Nombre: "Cliente sucio",
+    "IP Cliente": "  192.168.6.87    STEREN:8888  ",
+    "IP Principal": "192.168.6.24 - modem 192.168.6.90",
+    SSID: "  Red  con  espacios  ",
+    "Pass WiFi": "clave - con guion"
+  };
+  const c = filaCsvACliente(fila);
+  // Solo se recorta el espacio exterior; el texto interno queda intacto.
+  assert.equal(c.ip, "192.168.6.87    STEREN:8888");
+  assert.equal(c.ipPrincipal, "192.168.6.24 - modem 192.168.6.90");
+  assert.equal(c.ssid, "Red  con  espacios");
+  assert.equal(c.passWifi, "clave - con guion");
 });
 
-test("reconciliarClientes empareja por IP y prefiere CSV en campos ricos", () => {
-  const csv = [
-    filaCsvACliente({
-      Nombre: "Cliente A",
-      "IP Cliente": "192.168.10.20",
-      SSID: "NuevoSSID",
-      "Pass WiFi": "nueva",
-      Plan: "20 MB",
-      Mensualidad: "500"
-    })
-  ];
-  const fs = [
-    {
-      id: "fsA",
-      nombre: "Cliente A",
-      ip: "192.168.10.20",
-      ssid: "ViejoSSID",
-      passWifi: "vieja",
-      megas: "5 MB",
-      monto: 400,
-      fechaProximoPago: "2024-05-01",
-      ultimoPago: "2024-04-01",
-      diaPago: 1
-    }
-  ];
-  const { clientes, resumen } = reconciliarClientes(csv, fs);
-  assert.equal(clientes.length, 1);
-  assert.equal(resumen.emparejados, 1);
-  const out = clientes[0];
-  // id de Firestore se conserva (no romper referencias de movimientos).
-  assert.equal(out.id, "fsA");
-  // Campos ricos: gana CSV.
-  assert.equal(out.ssid, "NuevoSSID");
-  assert.equal(out.passWifi, "nueva");
-  assert.equal(out.megas, "20 MB");
-  assert.equal(out.monto, 500);
-  // Campos de historial: gana Firestore.
-  assert.equal(out.fechaProximoPago, "2024-05-01");
-  assert.equal(out.ultimoPago, "2024-04-01");
-  assert.equal(out.diaPago, 1);
-  // Se registra el conflicto de los campos ricos.
-  assert.ok(resumen.conflictos.length >= 1);
-});
-
-test("reconciliarClientes empareja por nombre cuando no hay IP", () => {
-  const csv = [
-    filaCsvACliente({ Nombre: "María  López", SSID: "casaML" })
-  ];
-  const fs = [{ id: "fsML", nombre: "Maria Lopez", monto: 350 }];
-  const { clientes, resumen } = reconciliarClientes(csv, fs);
-  assert.equal(clientes.length, 1);
-  assert.equal(resumen.emparejados, 1);
-  assert.equal(clientes[0].id, "fsML");
-  assert.equal(clientes[0].ssid, "casaML");
-  // monto de Firestore se conserva (CSV no trajo monto > 0).
-  assert.equal(clientes[0].monto, 350);
-});
-
-test("reconciliarClientes: CSV vacio conserva solo los de Firestore", () => {
-  const fs = [{ id: "fs1", nombre: "Uno", ip: "1.1.1.1" }];
-  const { clientes, resumen } = reconciliarClientes([], fs);
-  assert.equal(clientes.length, 1);
-  assert.equal(resumen.soloFirestore, 1);
+test("filaCsvACliente NO incluye las claves socio ni tipoPago", () => {
+  const c = filaCsvACliente({ Nombre: "Cualquiera", "IP Cliente": "10.0.0.1" });
+  assert.ok(!("socio" in c), "el cliente no debe tener la clave socio");
+  assert.ok(!("tipoPago" in c), "el cliente no debe tener la clave tipoPago");
 });

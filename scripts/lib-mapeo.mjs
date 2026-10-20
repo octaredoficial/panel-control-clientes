@@ -5,6 +5,12 @@
    secundarios (no lee archivos, no hace red): asi se puede probar con
    node:test usando fixtures en linea.
 
+   Carga desde cero del CSV (sin Firestore): los valores del CSV se
+   toman LITERALMENTE, sin limpieza de datos. Campos sucios como una IP
+   con texto extra ('192.168.6.87    STEREN:8888') se conservan verbatim
+   (solo se recorta el espacio exterior via toma()); el operador los
+   corrige despues en la app.
+
    Contiene:
      - parsearCSV(texto)            -> filas [{header: valor}] (CSV RFC-4180ish)
      - normalizarTipoInternet(v)    -> 'AP' | 'PtP' | 'Modem' | ''
@@ -12,13 +18,11 @@
      - parsearFechaISO(v)           -> 'YYYY-MM-DD' | ''
      - filaCsvACliente(fila)        -> objeto cliente extendido
      - generarIdCliente()           -> id estable estilo crearCliente
-     - normalizarNombre(v)          -> clave de cotejo
-     - reconciliarClientes(csv, fs) -> {clientes, resumen}
 
    El mapeo refleja el esquema de cliente de app.js crearCliente:
      id, nombre, celular, direccion, ip, tipoConexion, apId, ssid,
      passWifi, passModem, ipPrincipal, megas, monto, fechaInstalacion,
-     diaPago, tipoPago, estatus, socio, fechaProximoPago, ultimoPago.
+     diaPago, estatus, fechaProximoPago, ultimoPago.
    ============================================================ */
 
 /* ----------------------------------------------------------
@@ -226,23 +230,12 @@ export function generarIdCliente() {
 }
 
 /**
- * Normaliza un nombre para cotejo laxo: minusculas, sin acentos, sin
- * espacios repetidos.
- */
-export function normalizarNombre(valor) {
-  return String(valor || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
  * Convierte una fila del CSV (objeto con las cabeceras de COLUMNAS_CSV)
- * en un objeto cliente extendido. NO calcula fechaProximoPago derivada:
- * conserva la del CSV si viene, y deja que crearCliente (en la app) o la
- * reconciliacion rellene lo que falte.
+ * en un objeto cliente extendido. Carga desde cero: los valores se toman
+ * LITERALMENTE (solo se recorta el espacio exterior via toma()), sin
+ * limpiar datos sucios (IP/SSID con texto extra se conservan verbatim).
+ * NO calcula fechaProximoPago derivada: conserva la del CSV si viene y
+ * deja que el operador rellene lo que falte en la app.
  *
  * Mapeo de columnas (las 13):
  *   Nombre        -> nombre
@@ -268,8 +261,8 @@ export function filaCsvACliente(fila) {
   // Mensualidad, el cliente queda en 0 y el operador lo corrige en la ficha.
   // Esto difiere a proposito de app.js crearCliente, que usa MONTO_DEFAULT
   // (500) para clientes NUEVOS creados a mano en la UI (ahi 500 es un valor
-  // de arranque razonable; aqui seria inventar ingresos y sesgaria el reparto
-  // Carlos/Octavio). merge-and-seed registra montos 0 para que se revisen.
+  // de arranque razonable; aqui seria inventar ingresos). merge-and-seed
+  // registra montos 0 para que se revisen.
   const montoRaw = toma("Mensualidad").replace(/[$,\s]/g, "");
   const montoNum = montoRaw === "" ? 0 : Number(montoRaw);
 
@@ -289,157 +282,8 @@ export function filaCsvACliente(fila) {
     monto: Number.isFinite(montoNum) ? montoNum : 0,
     fechaInstalacion: "",
     diaPago: null,
-    tipoPago: "PTP",
     estatus: parsearEstado(toma("Estado")),
-    socio: "Carlos",
     fechaProximoPago: parsearFechaISO(toma("Proximo Pago")),
     ultimoPago: ""
   };
-}
-
-/* ----------------------------------------------------------
-   Reconciliacion CSV <-> Firestore.
-
-   Regla de cotejo (documentada): se emparejan clientes por
-   "IP Cliente" (campo `ip`) si ambos la tienen; si no, por nombre
-   normalizado. Para cada par:
-     - Campos mas ricos (ssid, passWifi, passModem, ipPrincipal, megas,
-       monto, direccion, celular, tipoConexion) -> se PREFIERE el CSV
-       cuando trae valor; si el CSV lo deja vacio, se conserva el de
-       Firestore.
-     - Campos derivados del historial de pagos (fechaProximoPago,
-       ultimoPago, diaPago, apId, socio) -> se PREFIERE Firestore cuando
-       trae valor; si no, el del CSV.
-     - El `id` se toma de Firestore si existe el par (para no romper
-       referencias de movimientos); si el cliente solo esta en el CSV, se
-       usa el id generado por el CSV.
-   Nunca se descarta un cliente presente en una sola fuente.
-   ---------------------------------------------------------- */
-export function reconciliarClientes(clientesCsv, clientesFirestore) {
-  const csv = Array.isArray(clientesCsv) ? clientesCsv : [];
-  const fs = Array.isArray(clientesFirestore) ? clientesFirestore : [];
-
-  const resumen = {
-    totalCsv: csv.length,
-    totalFirestore: fs.length,
-    emparejados: 0,
-    soloCsv: 0,
-    soloFirestore: 0,
-    conflictos: []
-  };
-
-  // Indices de Firestore por ip y por nombre normalizado.
-  const porIp = new Map();
-  const porNombre = new Map();
-  for (const c of fs) {
-    const ip = String(c.ip || "").trim();
-    if (ip) porIp.set(ip, c);
-    const nom = normalizarNombre(c.nombre);
-    if (nom) porNombre.set(nom, c);
-  }
-
-  const fsUsados = new Set();
-  const resultado = [];
-
-  for (const cliente of csv) {
-    const ip = String(cliente.ip || "").trim();
-    let par = null;
-    if (ip && porIp.has(ip)) {
-      par = porIp.get(ip);
-    } else {
-      const nom = normalizarNombre(cliente.nombre);
-      if (nom && porNombre.has(nom)) par = porNombre.get(nom);
-    }
-
-    if (par) {
-      fsUsados.add(par);
-      resumen.emparejados += 1;
-      resultado.push(fusionarCliente(cliente, par, resumen));
-    } else {
-      resumen.soloCsv += 1;
-      resultado.push({ ...cliente });
-    }
-  }
-
-  // Clientes que solo existen en Firestore (nunca se descartan).
-  for (const c of fs) {
-    if (!fsUsados.has(c)) {
-      resumen.soloFirestore += 1;
-      resultado.push({ ...c });
-    }
-  }
-
-  return { clientes: resultado, resumen };
-}
-
-// Campos donde gana el CSV si trae valor.
-const CAMPOS_PREF_CSV = [
-  "ssid",
-  "passWifi",
-  "passModem",
-  "ipPrincipal",
-  "megas",
-  "direccion",
-  "celular",
-  "tipoConexion"
-];
-// Campos donde gana Firestore si trae valor.
-const CAMPOS_PREF_FS = [
-  "fechaProximoPago",
-  "ultimoPago",
-  "diaPago",
-  "apId",
-  "socio",
-  "fechaInstalacion",
-  "tipoPago"
-];
-
-function tieneValor(v) {
-  return v != null && v !== "";
-}
-
-function fusionarCliente(csv, fs, resumen) {
-  // Base: todo lo de Firestore (conserva id y lo que la app ya calculo).
-  const out = { ...fs };
-
-  for (const campo of CAMPOS_PREF_CSV) {
-    const vCsv = csv[campo];
-    if (tieneValor(vCsv)) {
-      if (tieneValor(out[campo]) && String(out[campo]) !== String(vCsv)) {
-        resumen.conflictos.push({
-          id: out.id,
-          nombre: out.nombre,
-          campo,
-          firestore: out[campo],
-          csv: vCsv,
-          elegido: "csv"
-        });
-      }
-      out[campo] = vCsv;
-    }
-  }
-
-  for (const campo of CAMPOS_PREF_FS) {
-    if (!tieneValor(out[campo]) && tieneValor(csv[campo])) {
-      out[campo] = csv[campo];
-    }
-  }
-
-  // monto: preferir CSV si trae un numero > 0; si no, conservar FS.
-  const montoCsv = Number(csv.monto);
-  if (Number.isFinite(montoCsv) && montoCsv > 0) {
-    if (tieneValor(out.monto) && Number(out.monto) !== montoCsv) {
-      resumen.conflictos.push({
-        id: out.id,
-        nombre: out.nombre,
-        campo: "monto",
-        firestore: out.monto,
-        csv: montoCsv,
-        elegido: "csv"
-      });
-    }
-    out.monto = montoCsv;
-  }
-
-  return out;
 }
