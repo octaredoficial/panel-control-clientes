@@ -956,9 +956,10 @@ body {
 }
 
 /* ---------------------- Login (overlay) ------------------- */
-/* Overlay de inicio de sesion (Firebase Auth). Centrado, bloqueante y
+/* Overlay de inicio de sesion (contrasena unica). Centrado, bloqueante y
    compatible con modo oscuro mediante las variables de la paleta. Se
-   oculta con el atributo [hidden] desde firebase-sync.js al autenticar. */
+   oculta con el atributo [hidden] desde backend-sync.js tras un login
+   correcto. */
 .login {
   position: fixed;
   inset: 0;
@@ -997,11 +998,20 @@ body {
   margin-top: 8px;
 }
 
+.login__form {
+  margin-top: 20px;
+  text-align: left;
+}
+
+.login__campo {
+  margin-bottom: 4px;
+}
+
 .login__acciones {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 22px;
+  margin-top: 18px;
 }
 
 .login__btn {

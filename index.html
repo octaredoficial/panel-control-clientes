@@ -344,30 +344,40 @@
     </main>
 
     <footer class="pie">
-      <p>Panel de Control de Clientes · Tus datos se sincronizan en la nube con Firebase tras iniciar sesión.</p>
+      <p>Panel de Control de Clientes · Tus datos se guardan y sincronizan en vivo desde tu propio servidor tras iniciar sesión.</p>
     </footer>
   </div>
 
   <!-- ================= OVERLAY DE INICIO DE SESIÓN ================= -->
   <!--
-    Visible y bloqueante hasta que haya sesión (firebase-sync.js lo
-    oculta con onAuthStateChanged). IDs esperados por firebase-sync.js:
-    #pcc-login, #btn-login-google, #btn-login-anonimo, #login-error.
+    Visible y bloqueante hasta que haya sesión (backend-sync.js lo oculta
+    tras un login correcto con la contraseña única). IDs esperados por
+    backend-sync.js: #pcc-login, #form-login, #login-password, #btn-login,
+    #login-error.
   -->
   <div id="pcc-login" class="login">
     <div class="login__panel" role="dialog" aria-modal="true" aria-labelledby="login-titulo">
       <h2 class="login__titulo" id="login-titulo">Panel de Control de Clientes</h2>
-      <p class="login__texto">Inicia sesión para acceder a tus datos sincronizados en la nube.</p>
-      <div class="login__acciones">
-        <button type="button" id="btn-login-google" class="btn btn--primario login__btn">
-          <span class="btn__icono" aria-hidden="true">🔑</span>
-          <span>Entrar con Google</span>
-        </button>
-        <button type="button" id="btn-login-anonimo" class="btn btn--secundario login__btn">
-          <span class="btn__icono" aria-hidden="true">👤</span>
-          <span>Entrar como invitado</span>
-        </button>
-      </div>
+      <p class="login__texto">Escribe la contraseña de acceso para entrar.</p>
+      <form id="form-login" class="login__form" autocomplete="off">
+        <div class="campo-grupo login__campo">
+          <label class="campo-label" for="login-password">Contraseña</label>
+          <input
+            type="password"
+            id="login-password"
+            name="password"
+            class="campo"
+            autocomplete="current-password"
+            required
+            autofocus />
+        </div>
+        <div class="login__acciones">
+          <button type="submit" id="btn-login" class="btn btn--primario login__btn">
+            <span class="btn__icono" aria-hidden="true">🔒</span>
+            <span>Entrar</span>
+          </button>
+        </div>
+      </form>
       <p class="login__error" id="login-error" hidden></p>
     </div>
   </div>
@@ -843,8 +853,9 @@
   <!-- Vista "Mapa de red" (FEAT-003). Lee window.PCC de forma perezosa, por
        lo que debe cargarse despues de app.js (defer preserva el orden). -->
   <script src="red-mapa.js" defer></script>
-  <!-- Modulo de sincronizacion con Firebase (Auth + Firestore). Solo se
-       ejecuta en el navegador; se carga desde el CDN gstatic. -->
-  <script type="module" src="firebase-sync.js"></script>
+  <!-- Modulo de sincronizacion con el backend propio (login por contrasena
+       unica + estado via REST y sync en vivo via WebSocket). Solo se ejecuta
+       en el navegador; mismo-origen con el servidor que sirve estos estaticos. -->
+  <script type="module" src="backend-sync.js"></script>
 </body>
 </html>

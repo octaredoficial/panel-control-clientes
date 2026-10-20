@@ -173,6 +173,63 @@ El stack son dos servicios en `docker-compose.yml` (raíz del repo):
 
 ---
 
+## 3.6 Cutover del frontend (FEAT-004) y prueba de humo
+
+El corte de Firebase en el navegador ya está hecho:
+
+- `index.html` **ya no carga** `firebase-sync.js`; en su lugar carga
+  `backend-sync.js` como `<script type="module">`. `firebase-sync.js` **se
+  eliminó** del repositorio (su lógica quedó superada).
+- El overlay `#pcc-login` **ya no** tiene botones de Google/invitado: ahora es un
+  formulario de **una sola contraseña** (`#form-login` con `#login-password` y el
+  botón `#btn-login`), conservando `#login-error` para los mensajes.
+- `backend-sync.js` replica la estrategia de `firebase-sync.js` contra el backend
+  propio: login por `POST /api/login`, carga inicial con `GET /api/state`, espejo
+  de escrituras locales parcheando los cuatro setters de `PCC`
+  (`guardarClientes`/`guardarMovimientos`/`guardarConfig`/`setTheme`, con la guarda
+  `_aplicandoSnapshot` para evitar bucles) y aplicación de cambios remotos vía
+  **WebSocket `/ws`** llamando a los setters **originales** + `PCC.UI.render()` /
+  `PCC.UI.aplicarTema()`. El logout llama `POST /api/logout`, cierra el WebSocket,
+  restaura los setters originales y vuelve a mostrar el overlay.
+
+### Prueba de humo (requiere el backend de FEAT-002 corriendo)
+
+Arranca el backend sirviendo el frontend (ver `server/README.md`), p. ej.:
+
+```bash
+cd server
+APP_PASSWORD=miclave \
+SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))") \
+DB_PATH=./pcc.sqlite PORT=8080 COOKIE_INSECURE=1 node index.js
+```
+
+Luego, en el navegador (dos pestañas contra el **mismo** backend):
+
+1. **Login:** abre la app → aparece el overlay de contraseña. Con una contraseña
+   **incorrecta** debe mostrarse `Contraseña incorrecta. Intenta de nuevo.` en
+   `#login-error` y **no** abrir la app. Con la contraseña **correcta** el overlay
+   se oculta y la app carga su estado.
+2. **Sync en vivo:** crea/edita/pausa/elimina un cliente en la pestaña A y confirma
+   que **aparece solo** en la pestaña B **sin recargar** (vía WebSocket).
+3. **Pagos:** registra un pago y revisa que, tras recargar (`GET /api/state`),
+   persisten `folio`, `periodo` y los campos `prevUltimoPago` /
+   `prevFechaProximoPago`; prueba también **revertir** el pago.
+4. **Reparto Carlos/Octavio**, **mapa de red** (lee `PCC.cargarClientes` +
+   `TOPOLOGIA`), **modo oscuro** (el tema se sincroniza entre pestañas),
+   **exportar CSV** e **historial**: todo sigue funcionando porque la capa de datos
+   de `app.js` no cambió; solo cambió el módulo de sync.
+5. **Logout:** pulsa «Cerrar sesión» → se cierra la sesión, se cierra el WebSocket
+   y reaparece el overlay de contraseña.
+
+> En este sandbox se verificó por `curl` contra el backend: `backend-sync.js` se
+> sirve con `Content-Type: text/javascript`, contraseña incorrecta → `401`,
+> correcta → `200` + cookie `Set-Cookie`, `GET /api/state` sin cookie → `401` y con
+> cookie → snapshot JSON, y un `PUT /api/clientes` seguido de `GET /api/state`
+> conserva los campos ricos (p. ej. `ssid`). La verificación de las **dos pestañas**
+> en vivo la hace el usuario en el navegador con el backend corriendo.
+
+---
+
 ## 4. Alcance explícito de FEAT-001
 - **Sí:** línea base de pruebas (documentada), verificación de toolchain, y este ADR.
 - **No:** ningún cambio en `app.js`, `index.html`, `firebase-sync.js`, `styles.css` ni
