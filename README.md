@@ -1,91 +1,113 @@
 # Panel de Control de Clientes
 
-Aplicación web para administrar los clientes y las finanzas de un negocio de venta de internet / megas. Está hecha con **HTML + CSS + JavaScript puro (vanilla)**: no necesita bundler, ni instalación de dependencias, ni frameworks. Ahora usa **Firebase (Cloud Firestore + Authentication)** para guardar los datos **en la nube** y **sincronizarlos entre tu móvil y tu PC**: puedes abrirla en cualquier dispositivo y ver siempre la misma información.
+Aplicación web para administrar los clientes y las finanzas de un negocio de venta de internet / megas (WISP). Está hecha con **HTML + CSS + JavaScript puro (vanilla)**: no necesita bundler ni frameworks en el navegador. Es **100% autohospedada**: corre en tu propio servidor con un **backend ligero en Node.js**, una base de datos **SQLite embebida** y un **proxy Caddy** que sirve **HTTPS autofirmado**. Guarda los datos en tu servidor y los **sincroniza en vivo entre tu móvil y tu PC**: abres la app en cualquier dispositivo y ves siempre la misma información.
 
 La interfaz tiene una paleta **minimalista** (acento índigo suave) con **modo claro y modo oscuro**, y toda la aplicación está en **español**.
 
+## Arquitectura
+
+Todo corre en **tu servidor** (no hay dependencias de servicios externos como Firebase o Netlify). El stack se orquesta con **Docker Compose** y son dos contenedores:
+
+- **Frontend (estático):** `index.html`, `app.js`, `red-mapa.js`, `styles.css` y el módulo de sincronización `backend-sync.js`. Es la misma app vanilla de siempre; toda la lógica de negocio vive en `app.js`.
+- **`app` (backend):** servidor **Node.js 22** con dependencias cero, que embebe **SQLite** (archivo único en un volumen de Docker), expone una **API REST + WebSocket** para los cuatro dominios de datos (`clientes`, `movimientos`, `config`, `theme`), hace de **login con contraseña única** y **sirve los archivos estáticos** del frontend. Ver [`server/README.md`](./server/README.md) para el contrato de la API.
+- **`proxy` (Caddy):** termina **HTTPS autofirmado** (`tls internal`, sin dominio) y hace de reverse proxy hacia `app`. Es el único que publica puertos (80 y 443); redirige `http://` a `https://`.
+
+```
+Navegador (móvil/PC)
+      │  HTTPS autofirmado  +  WebSocket (wss://) para la sync en vivo
+      ▼
+  Caddy (proxy)  :80 → :443
+      │  red interna de Docker
+      ▼
+  app (Node 22 + SQLite)  ──►  volumen pcc-data (pcc.sqlite)
+```
+
+Las decisiones de arquitectura (por qué WebSocket, SQLite, Caddy, contraseña única, etc.) están en [`MIGRATION.md`](./MIGRATION.md).
+
 ## Cómo abrirla
 
-La app está pensada para abrirse **en cualquier dispositivo (móvil o PC)** con los mismos datos sincronizados. Para ello se publica como sitio estático en **Netlify** y guarda los datos en **Firebase**.
+La app se sirve desde **tu propio servidor** y se abre **en cualquier dispositivo (móvil o PC)** con los mismos datos sincronizados.
 
-- **En línea (recomendado):** abre el sitio desplegado en Netlify:
+- **En producción (tu servidor Vultr):** abre
 
-  **https://ornate-melba-f303fc.netlify.app**
+  **https://64.177.92.121**
 
-  Funciona igual en el navegador del móvil y en el de la PC (Chrome, Edge, Firefox, Safari…).
+  El navegador avisará **una sola vez** de que el certificado es **autofirmado** (es lo esperado al no tener dominio): acepta la advertencia y continúa. Funciona igual en el navegador del móvil y en el de la PC (Chrome, Edge, Firefox, Safari…). El despliegue paso a paso está en [`DEPLOY.md`](./DEPLOY.md).
 
-- **En local para desarrollo:** sírvela con un **servidor http** sencillo y ábrela en `http://localhost`. Por ejemplo, desde la carpeta del proyecto:
+- **En local para desarrollo:** levanta el stack con Docker Compose desde la carpeta del proyecto:
 
+  ```bash
+  cp .env.example .env     # pon tu APP_PASSWORD y un SESSION_SECRET aleatorio
+  docker compose up -d --build
   ```
-  python3 -m http.server 8080
-  ```
 
-  y luego abre `http://localhost:8080`.
+  y abre `https://localhost` (acepta el certificado autofirmado). También puedes ejecutar solo el backend con Node para desarrollo rápido (ver [`server/README.md`](./server/README.md)).
 
-> **Importante: ya NO funciona con doble clic (`file://`).** Como ahora carga los SDK de Firebase mediante **módulos ES** desde el CDN de gstatic, el navegador los bloquea bajo el protocolo `file://` (por CORS y por las reglas de los módulos). Debes abrirla por **http/https** (Netlify o un servidor local) y **tener conexión a internet**.
+> **Inicio de sesión con contraseña única:** al abrir la aplicación aparece una pantalla que pide **una sola contraseña** (la que configures en `APP_PASSWORD`). Ya **no** hay login con Google ni acceso anónimo. Una vez dentro, en la cabecera tienes el botón **Cerrar sesión**.
 
-> **Inicio de sesión:** al abrir la aplicación aparece una pantalla que pide **iniciar sesión**. Puedes entrar con **Google** o como **invitado** (acceso anónimo). Una vez dentro, en la cabecera tienes el botón **Cerrar sesión**.
+> La primera vez (si el servidor está vacío) se cargan automáticamente unos **datos de ejemplo** para que puedas probar todo de inmediato (ver [Siembra y migración inicial](#siembra-y-migración-inicial)).
 
-> La primera vez (si la nube está vacía) se cargan automáticamente unos **datos de ejemplo** para que puedas probar todo de inmediato (ver [Siembra y migración inicial](#siembra-y-migración-inicial)).
+## Login con contraseña única
 
-## Sincronización en la nube con Firebase
+El acceso se controla con **una sola contraseña compartida**, no con cuentas de usuario:
 
-La aplicación guarda y sincroniza los datos con **Cloud Firestore** del proyecto Firebase `panel-clientes-12a4a`, y controla el acceso con **Firebase Authentication**.
+- La contraseña se define en la variable de entorno **`APP_PASSWORD`** del backend (en tu `.env`). Elige una fuerte.
+- Al enviar la contraseña, el backend la compara en **tiempo constante** y, si es correcta, emite un **token de sesión firmado** (HMAC-SHA256 con `SESSION_SECRET`) en una **cookie HttpOnly**. Todas las rutas `/api/*` y el WebSocket exigen esa cookie.
+- Si la contraseña es incorrecta, se muestra un mensaje en español en la pantalla de acceso y la app no se abre.
+- **Cerrar sesión** borra la sesión, cierra el WebSocket y vuelve a mostrar la pantalla de contraseña.
 
-- **Mismos datos en todos lados:** cualquier cambio (alta/edición de cliente, pagos, gastos, configuración, tema) se escribe en Firestore y aparece **en vivo** en los demás dispositivos que tengan la sesión abierta.
-- **Datos COMPARTIDOS entre todos los autenticados:** por ahora, todo el que inicie sesión (con Google o como invitado) ve y edita **los mismos** datos. Esto es **intencional y temporal** para arrancar y probar; **todavía no** se restringe por correo. Más adelante se puede endurecer (ver `firestore.rules`).
-- **Estructura de datos en Firestore** (compartida, no por usuario):
-  - Colección **`clientes`**: un documento por cliente (el `id` del cliente es el id del documento).
-  - Colección **`movimientos`**: un documento por movimiento (gastos, ingresos, ahorros y pagos; el `id` del movimiento es el id del documento).
-  - Documento **`config/app`**: el objeto de configuración (días de aviso, moneda, gastos fijos, etc.).
-  - Documento **`config/theme`**: el tema, con la forma `{ valor: 'claro' | 'oscuro' }`.
-- **SDK:** se usa el SDK modular de Firebase **v10.12.5** cargado por el CDN de gstatic (`firebase-app`, `firebase-auth`, `firebase-firestore`) desde `firebase-sync.js`.
-- **Degradación segura:** si el SDK no carga o falla el inicio de sesión, la app no se rompe; muestra un mensaje en español en la pantalla de inicio de sesión.
+Las variables de entorno del backend (`APP_PASSWORD`, `SESSION_SECRET`, `DB_PATH`, `PORT`) se documentan en [`.env.example`](./.env.example) y [`server/README.md`](./server/README.md).
+
+## Sincronización en vivo (WebSocket)
+
+El **servidor propio** es la fuente de verdad. El `localStorage` del navegador actúa como **espejo / caché local** para que la interfaz siga siendo **instantánea** (la pantalla lee de ese espejo de forma síncrona), mientras `backend-sync.js` mantiene el espejo al día con el servidor y propaga a este cada cambio que haces.
+
+- **Mismos datos en todos lados:** cualquier cambio (alta/edición de cliente, pagos, gastos, configuración, tema) se guarda en el backend (SQLite) y se **emite por WebSocket** a los demás dispositivos que tengan la sesión abierta, que lo aplican **en vivo sin recargar**.
+- **Datos compartidos:** todo el que entre con la contraseña ve y edita **los mismos** datos (es un panel de un solo negocio).
+- **Estructura de datos en el servidor** (tablas SQLite, cada registro guardado como objeto JSON completo para no perder campos):
+  - Tabla **`clientes`**: un registro por cliente (el `id` del cliente es la clave).
+  - Tabla **`movimientos`**: un registro por movimiento (gastos, ingresos, ahorros y pagos; el `id` del movimiento es la clave).
+  - Fila **`config`**: el objeto de configuración (días de aviso, moneda, gastos fijos, etc.).
+  - Fila **`theme`**: el tema, con la forma `{ valor: 'claro' | 'oscuro' }`.
+- **Degradación segura:** si el backend no responde, la app no se rompe; muestra un mensaje en español y el WebSocket reintenta reconectar.
 
 ### Siembra y migración inicial
 
-La **primera vez** que alguien entra y **Firestore está vacío** (sin clientes ni movimientos), la app **siembra la nube una sola vez**:
+La **primera vez** que entras y el **servidor está vacío** (sin clientes ni movimientos), la app **siembra una sola vez**:
 
-- Si ese navegador ya tenía datos en `localStorage` de la versión anterior (solo local), **sube esos** datos a Firestore.
+- Si ese navegador ya tenía datos en `localStorage` de una versión anterior, **sube esos** datos al backend.
 - Si no hay datos locales, usa el conjunto de arranque (`construirSeed`, los **18 clientes reales de OCTARED**; ver [Datos precargados](#datos-precargados-los-18-clientes-reales-de-octared)) más la configuración y el tema por defecto.
 
-Si Firestore **ya tiene datos**, la app **no los duplica ni los sobrescribe**: la nube es la fuente de verdad y simplemente se refleja en cada dispositivo.
+Si el servidor **ya tiene datos**, la app **no los duplica ni los sobrescribe**: el backend es la fuente de verdad y simplemente se refleja en cada dispositivo.
 
-## Pasos en Firebase (consola)
+Para cargar tus clientes reales (desde el CSV y/o una exportación de Firebase anterior) usa las herramientas de migración descritas en [`MIGRATION.md`](./MIGRATION.md) (scripts en [`scripts/`](./scripts)).
 
-Estos pasos se hacen una sola vez en la [consola de Firebase](https://console.firebase.google.com/) sobre el proyecto `panel-clientes-12a4a`:
+## Despliegue en el servidor
 
-1. **Authentication → Sign-in method:** habilitar **Google** y **Anónimo** (ya hechos). Son los dos métodos que usa la pantalla de inicio de sesión.
-2. **Authentication → Settings → Authorized domains:** añadir los dominios desde los que se abrirá la app para que el inicio de sesión funcione:
-   - `ornate-melba-f303fc.netlify.app` (el sitio en Netlify)
-   - `localhost` (para pruebas locales con un servidor http)
-3. **Firestore Database:** crear la base de datos si aún no existe. Luego, en la pestaña **Rules**, pegar el contenido del archivo **`firestore.rules`** de este repositorio y pulsar **Publicar**. Esas reglas permiten leer y escribir solo a usuarios autenticados.
+El despliegue en tu servidor Vultr (Ubuntu, IP `64.177.92.121`) está documentado paso a paso en [`DEPLOY.md`](./DEPLOY.md): instalar Docker + Compose, clonar el repo, crear `.env` con `APP_PASSWORD` y `SESSION_SECRET`, `docker compose up -d --build`, abrir `https://64.177.92.121` y aceptar el certificado autofirmado. Incluye además cómo **no interrumpir la VPN del MikroTik** (el stack no usa `network_mode: host` y solo publica 80/443), ver logs, reiniciar y respaldar la base de datos SQLite.
 
-> **Sobre las claves:** las claves Web que aparecen en `firebaseConfig` (dentro de `firebase-sync.js`) son **públicas por diseño**; no son secretas. La seguridad real la dan las **reglas de Firestore** más **Authentication**, no el ocultar esas claves.
+## Migración de datos
 
-## Pasos en Netlify
+Para traer tus clientes existentes al nuevo backend hay herramientas en [`scripts/`](./scripts) y el runbook completo en [`MIGRATION.md`](./MIGRATION.md):
 
-El sitio se publica como estático, **sin build**, tal como define `netlify.toml`:
+- `scripts/export-firestore.mjs` — exporta tus datos de Firebase (lo ejecutas tú con tus credenciales) a `export.json`.
+- `scripts/import-csv.mjs` — convierte tu CSV de clientes (Nombre, Telefono, Direccion, Plan, Mensualidad, Proximo Pago, Estado, Tipo Internet, IP Cliente, IP Principal, SSID, Pass WiFi, Pass Modem) a objetos cliente.
+- `scripts/merge-and-seed.mjs` — reconcilia ambas fuentes y carga el resultado en el backend.
 
-1. En [Netlify](https://app.netlify.com/) conectar el repositorio de GitHub **`octaredoficial/panel-control-clientes`** (o, como alternativa rápida, **arrastrar la carpeta** del proyecto a Netlify).
-2. Configuración de despliegue:
-   - **Build command:** vacío (ninguno).
-   - **Publish directory:** `.` (la raíz del repositorio), tal como indica `netlify.toml`.
-3. Tras el despliegue, el sitio queda disponible en **https://ornate-melba-f303fc.netlify.app**.
-4. **Recordatorio:** ese dominio (`ornate-melba-f303fc.netlify.app`) debe estar en **Authorized domains** de Firebase (paso anterior) para que el inicio de sesión funcione.
+Los archivos con datos reales (`export.json`, `clientes-from-csv.json`, `*.csv`) están en `.gitignore` y **no se suben al repo**. Recuerda **respaldar `export.json`** antes de dar de baja Firebase.
 
 ## Verificación manual en el navegador
 
-Como no hay navegador headless en el entorno de pruebas, esta comprobación se hace a mano:
+Como no hay navegador headless en el entorno de pruebas, esta comprobación se hace a mano (con el stack levantado y la app servida por el backend):
 
-1. Abre el sitio de Netlify (**https://ornate-melba-f303fc.netlify.app**) o sírvelo en local con un servidor http y usa `http://localhost`.
-2. **Inicia sesión con Google** y, en otra prueba, entra también **como invitado** (anónimo). Verifica que la pantalla de inicio de sesión desaparece y aparece la app.
+1. Abre **https://64.177.92.121** (o `https://localhost` en local) y acepta el certificado autofirmado.
+2. **Inicia sesión** con tu contraseña única (`APP_PASSWORD`). Verifica que la pantalla de acceso desaparece y aparece la app. Prueba también una **contraseña incorrecta** y confirma que muestra el error en español sin abrir la app.
 3. **Sincronización en vivo:** en un dispositivo/navegador logueado, **da de alta o edita un cliente**; en otro dispositivo/navegador (también con sesión iniciada) comprueba que el cambio **aparece solo**, sin recargar.
 4. **Pagar y revertir:** registra un **pago** de un cliente y luego pulsa **↩️ Revertir**; confirma que el Resumen y el Reparto se recalculan y que el cambio se refleja en el otro dispositivo.
-5. **Persistencia desde la nube:** **recarga** la página y confirma que los datos siguen ahí (vienen de Firestore, no solo del navegador).
+5. **Persistencia desde el servidor:** **recarga** la página y confirma que los datos siguen ahí (vienen del backend, no solo del navegador).
 6. **Modo oscuro:** alterna el tema con 🌙 / ☀️ y comprueba que se recuerda y se sincroniza.
 7. **Consola del navegador:** debe quedar **sin errores**.
-8. **Cerrar sesión:** pulsa **Cerrar sesión** y verifica que vuelve a aparecer la pantalla de inicio de sesión.
+8. **Cerrar sesión:** pulsa **Cerrar sesión** y verifica que vuelve a aparecer la pantalla de contraseña.
 
 > El botón **Avisar** (WhatsApp) **sigue funcionando igual** que antes: abre un enlace `https://wa.me/...` con el mensaje prellenado.
 
@@ -93,7 +115,7 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 
 Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-y-recibos)), comprueba a mano en el navegador:
 
-1. **Inicia sesión** (con Google o como invitado).
+1. **Inicia sesión** con tu contraseña única (`APP_PASSWORD`).
 2. **Registrar un pago:** pulsa **✔️ Pagar** en un cliente, elige la **mensualidad que cubre** (periodo) y ajusta el **monto**, y **Confirma**. Debe abrirse el **recibo** con su **folio** `REC-AAAA-NNNN`.
 3. **Imprimir / PDF:** pulsa **🖨️ Imprimir / PDF** y confirma que en la vista previa **solo aparece el recibo** (no todo el panel); elige **"Guardar como PDF"** como destino para obtener el archivo.
 4. **WhatsApp:** pulsa **💬 Enviar por WhatsApp** y verifica que se abre `https://wa.me/...` con el **resumen prellenado** (folio, periodo, concepto y monto).
@@ -195,11 +217,11 @@ Los textos que salen en el recibo se editan desde el modal de **Configuración �
 - **`direccionNegocio`**: domicilio o referencia del negocio. Vacío por defecto.
 - **`mensajePie`**: línea de agradecimiento al pie del recibo. Por defecto **"Gracias por su preferencia."**.
 
-Estos datos **viajan dentro de la configuración** (`config/app`) y se **sincronizan** en la nube como el resto de la app, así que aparecen igual en todos tus dispositivos.
+Estos datos **viajan dentro de la configuración** (`config`) y se **sincronizan** con el servidor como el resto de la app, así que aparecen igual en todos tus dispositivos.
 
-### Cómo se guarda en Firebase
+### Cómo se guarda en el servidor
 
-Los campos nuevos (**`folio`** y **`periodo`**) viajan **dentro del propio objeto del movimiento** en la colección **`movimientos`**, **sin cambios de esquema** ni colecciones nuevas: un pago sigue siendo un movimiento con `esPago: true`.
+Los campos nuevos (**`folio`** y **`periodo`**) viajan **dentro del propio objeto del movimiento** en la tabla **`movimientos`**, **sin cambios de esquema** ni tablas nuevas: un pago sigue siendo un movimiento con `esPago: true`.
 
 Los **pagos antiguos** (registrados antes de esta fase, **sin folio ni periodo**) siguen funcionando: al verlos o reimprimir su recibo se aplica un **fallback** que muestra el folio como **"sin folio"** y deriva el periodo del **mes de la fecha del pago**.
 
@@ -272,16 +294,16 @@ Reglas con las que se cargan:
 
 > **Decisión sobre `tipoPago` (financiero PTP/Directo):** como la lista real no trae este dato, los 18 clientes se cargan con `tipoPago = "Directo"` por defecto. Este campo es solo una **etiqueta financiera informativa** (y alimenta los chips y estadísticas de PTP/Directo); **no altera el reparto entre socios**, que depende únicamente del campo **socio** (Carlos / Octavio). Puedes cambiar el `tipoPago` de cada cliente cuando quieras desde su ficha sin que eso afecte las cuentas del reparto.
 
-Puedes editar, pausar, borrar o completar los datos de cada cliente (incluidos los [campos de red](#campos-de-red-en-la-ficha-del-cliente)); todo queda guardado en la nube y sincronizado entre dispositivos.
+Puedes editar, pausar, borrar o completar los datos de cada cliente (incluidos los [campos de red](#campos-de-red-en-la-ficha-del-cliente)); todo queda guardado en el servidor y sincronizado entre dispositivos.
 
-## Cómo cargar los 18 reales si tu nube ya tenía datos de ejemplo
+## Cómo cargar los 18 reales si tu servidor ya tenía datos de ejemplo
 
-**Importante:** la siembra automática de los 18 reales **solo ocurre si Firestore está vacío** (ver [Siembra y migración inicial](#siembra-y-migración-inicial)). Si ya habías abierto la app antes, **tu nube ya tiene los datos de ejemplo anteriores**, así que los 18 reales **no aparecen solos**. Para cargarlos:
+**Importante:** la siembra automática de los 18 reales **solo ocurre si el servidor está vacío** (ver [Siembra y migración inicial](#siembra-y-migración-inicial)). Si ya habías abierto la app antes, **tu servidor ya tiene los datos de ejemplo anteriores**, así que los 18 reales **no aparecen solos**. Para cargarlos:
 
 1. Abre **Configuración** (botón ⚙️ en la parte superior).
 2. Pulsa **Reiniciar datos de ejemplo** y confirma.
 
-Esta acción **sobrescribe en la nube** todos los **clientes** y **movimientos** actuales con los **18 clientes reales** (deja la lista de movimientos vacía). El reinicio escribe a través de los mismos **setters** que la app usa para crear o editar, así que **se propaga a Firestore** y el cambio se refleja en todos los dispositivos con la sesión abierta.
+Esta acción **sobrescribe en el servidor** todos los **clientes** y **movimientos** actuales con los **18 clientes reales** (deja la lista de movimientos vacía). El reinicio escribe a través de los mismos **setters** que la app usa para crear o editar, así que **se propaga al backend** y el cambio se refleja en todos los dispositivos con la sesión abierta.
 
 > **Advertencia:** reiniciar **borra los datos previos** (los clientes y movimientos de ejemplo que hubiera) y los reemplaza por los 18 reales. Hazlo solo cuando quieras partir de ese conjunto limpio.
 
@@ -293,7 +315,9 @@ Para poder **identificar poco a poco** a cada cliente dentro de la red, la ficha
 - **Tipo de conexión:** un desplegable con **AP** (cliente colgando de un AP PtMP), **PtP** (enlace punto a punto dedicado), **Modem** (modem de cable) y **"sin asignar"** (vacío, falta identificar).
 - **AP / enlace:** un desplegable para elegir el **nodo padre** del cliente dentro de la topología: **AP_OCTARED_3**, **LiteAP AC-1 (CALOSWiFi)**, **LiteAP AC-2 (CARLOSWiFi)**, **PtP MERCEDES RH** o **PtP CASA 44**.
 
-Estos tres datos **viajan dentro del propio objeto del cliente** (en la colección **`clientes`**) y se **sincronizan a Firestore** como el resto de sus campos, **sin cambios de esquema** ni colecciones nuevas. Los clientes antiguos que no tuvieran estos campos siguen funcionando: se tratan como "falta identificar" hasta que les asignes IP, tipo de conexión y AP.
+Estos tres datos **viajan dentro del propio objeto del cliente** (en la tabla **`clientes`**) y se **sincronizan con el servidor** como el resto de sus campos, **sin cambios de esquema** ni tablas nuevas. Los clientes antiguos que no tuvieran estos campos siguen funcionando: se tratan como "falta identificar" hasta que les asignes IP, tipo de conexión y AP.
+
+> La ficha del cliente también incluye los **campos de red extendidos** de la migración —**SSID**, **Pass WiFi**, **Pass Modem** e **IP Principal**— para no perder ningún dato del CSV (ver [`MIGRATION.md`](./MIGRATION.md)).
 
 ## Mapa de red
 
@@ -325,7 +349,7 @@ Las conexiones se dibujan **al final, por detrás de las tarjetas**, con un **SV
 - **Enlaces inalámbricos (simulan microondas):** Core -> cada AP, Core -> cada punta PtP y cada AP/punta -> sus antenas o cliente. Se dibujan con **línea punteada animada** (efecto de "ondas" en movimiento), **azul** para los AP y **teal** para los PtP.
 - **Conexiones por cable:** Core -> cada **modem** directo, con **línea sólida continua** (simula el cable físico), en color verde/identificado.
 
-Las líneas se **recalculan** al cambiar el tamaño de la ventana y cada vez que se redibuja el mapa (incluidos los datos que llegan de Firebase). La animación de ondas se desactiva si el sistema pide **movimiento reducido** (`prefers-reduced-motion`).
+Las líneas se **recalculan** al cambiar el tamaño de la ventana y cada vez que se redibuja el mapa (incluidos los datos que llegan del servidor por WebSocket). La animación de ondas se desactiva si el sistema pide **movimiento reducido** (`prefers-reduced-motion`).
 
 ### Antenas fijas de infraestructura + clientes reales (sin duplicar)
 
@@ -338,7 +362,7 @@ El mapa **no es una imagen fija**: sus nodos de cliente se **derivan de los 18 c
 - Cliente **con IP** (y su AP/enlace asignado): aparece como nodo **identificado** (**verde**) colgando de su AP o enlace.
 - Cliente **sin IP**: aparece en la zona de **pendientes** (**naranja**) como "falta identificar".
 
-Como se nutre de los datos sincronizados, el mapa se **actualiza solo** cuando cambian los clientes (incluyendo los cambios que llegan desde Firebase en otro dispositivo). En el conjunto actual quedan **8 clientes identificados** (los que ya traen IP) y **10 pendientes**.
+Como se nutre de los datos sincronizados, el mapa se **actualiza solo** cuando cambian los clientes (incluyendo los cambios que llegan desde el servidor en otro dispositivo). En el conjunto actual quedan **8 clientes identificados** (los que ya traen IP) y **10 pendientes**.
 
 ### Buscador y colores
 
@@ -349,49 +373,50 @@ Como se nutre de los datos sincronizados, el mapa se **actualiza solo** cuando c
 
 Cada nodo con IP **abre su dirección en una pestaña nueva**. Ten en cuenta que las IPs `192.168.10.x` son **direcciones privadas** de la red de OCTARED: **solo abren si estás dentro de esa red o conectado por VPN**. Los **modems de cable** se abren en **`http://IP:8090`** y el resto de equipos en **`https://IP`**.
 
-> Los nodos de infraestructura del diagrama que **no** son clientes de cobro (como CASA 30, LB-LINDA_S, LiteBeam 5AC, Octarednuevaultima o CASA 54) **sí** se muestran ahora como una **fila fija** dentro de su AP (definidos en la topología). Los clientes de cobro siguen derivándose de la lista real de Firebase y se fusionan con esas antenas fijas por IP para no duplicarlos.
+> Los nodos de infraestructura del diagrama que **no** son clientes de cobro (como CASA 30, LB-LINDA_S, LiteBeam 5AC, Octarednuevaultima o CASA 54) **sí** se muestran ahora como una **fila fija** dentro de su AP (definidos en la topología). Los clientes de cobro siguen derivándose de la lista real del backend y se fusionan con esas antenas fijas por IP para no duplicarlos.
 
 ### Verificación manual del Mapa de red
 
 Como no hay navegador headless en el entorno de pruebas, esta comprobación se hace a mano:
 
-1. **Inicia sesión** (con Google o como invitado).
-2. **Carga los 18 reales:** abre **Configuración ⚙️** y pulsa **Reiniciar datos de ejemplo** (necesario si tu nube ya tenía datos; ver [Cómo cargar los 18 reales](#cómo-cargar-los-18-reales-si-tu-nube-ya-tenía-datos-de-ejemplo)).
+1. **Inicia sesión** con tu contraseña única (`APP_PASSWORD`).
+2. **Carga los 18 reales:** abre **Configuración ⚙️** y pulsa **Reiniciar datos de ejemplo** (necesario si tu servidor ya tenía datos; ver [Cómo cargar los 18 reales](#cómo-cargar-los-18-reales-si-tu-servidor-ya-tenía-datos-de-ejemplo)).
 3. **Abre la vista Red** con el botón **🗺️ Red** (pruébala en **PC** y en **móvil**) y comprueba: que **AP OCTARED3** lista sus **6 antenas**; qué clientes salen **identificados** (en verde) y cuáles **pendientes** (en naranja); y que las líneas **Core -> AP** son **punteadas** (microondas) mientras que **Core -> modem** son **sólidas** (cable).
 4. **Busca por nombre o IP** en el buscador del mapa y verifica que el nodo coincidente se **resalta** y el resto se atenúa.
 5. **Asigna una IP y un AP** a un cliente pendiente desde su ficha (Editar cliente -> IP, Tipo de conexión y AP/enlace) y guarda; al volver al mapa, ese cliente debe pasar de "falta identificar" a **identificado** bajo el AP indicado.
 6. **Sincronización:** en **otro dispositivo** con la sesión abierta, confirma que ese cliente aparece también como identificado, sin recargar.
 
-## Persistencia (Firestore + espejo local)
+## Persistencia (servidor propio + espejo local)
 
-Ahora la **fuente de verdad** es **Cloud Firestore** (en la nube). El **`localStorage`** del navegador actúa como **espejo / caché local** para que la interfaz siga siendo **instantánea**: la pantalla lee de ese espejo de forma síncrona, mientras `firebase-sync.js` mantiene el espejo al día con los datos remotos y propaga a la nube cada cambio que haces.
+La **fuente de verdad** es el **backend propio** (SQLite en tu servidor). El **`localStorage`** del navegador actúa como **espejo / caché local** para que la interfaz siga siendo **instantánea**: la pantalla lee de ese espejo de forma síncrona, mientras `backend-sync.js` mantiene el espejo al día con los datos remotos y propaga al servidor cada cambio que haces.
 
-- En la nube, los datos se guardan en las colecciones **`clientes`** y **`movimientos`** y en los documentos **`config/app`** y **`config/theme`** (ver [Sincronización en la nube con Firebase](#sincronización-en-la-nube-con-firebase)).
+- En el servidor, los datos se guardan en las tablas **`clientes`** y **`movimientos`** y en las filas **`config`** y **`theme`** (ver [Sincronización en vivo (WebSocket)](#sincronización-en-vivo-websocket)).
 - En el navegador, el espejo local vive bajo claves con prefijo `pcc.` (`pcc.clientes`, `pcc.movimientos`, `pcc.config`, `pcc.theme`). La configuración (`pcc.config`) incluye los gastos fijos del negocio (`costoAntena`, `numAntenas`, `costoLuz`, `luzPeriodicidadMeses`, `luzMesAncla`), que se añaden con sus valores por defecto a cualquier configuración antigua que no los tuviera.
 
 Esto implica que:
 
-- Los datos **se comparten entre dispositivos y navegadores**: al iniciar sesión ves siempre la misma información y los cambios se sincronizan **en vivo**.
-- Los datos **permanecen** aunque cierres y vuelvas a abrir la página, porque viven en la nube (no dependen de un solo navegador).
-- Si borras el almacenamiento local del sitio, no pierdes nada: al volver a iniciar sesión los datos se **vuelven a traer desde Firestore**.
+- Los datos **se comparten entre dispositivos y navegadores**: al iniciar sesión ves siempre la misma información y los cambios se sincronizan **en vivo** por WebSocket.
+- Los datos **permanecen** aunque cierres y vuelvas a abrir la página, porque viven en el servidor (no dependen de un solo navegador).
+- Si borras el almacenamiento local del sitio, no pierdes nada: al volver a iniciar sesión los datos se **vuelven a traer del servidor**.
 
 ## Nota sobre WhatsApp
 
 El botón **Avisar** abre un enlace de WhatsApp (`https://wa.me/...`) con el mensaje prellenado. El número de celular se normaliza a solo dígitos y, si tiene 10 dígitos, se le antepone el código de país de México (**52**).
 
-Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp Web o la app disponible). Como ahora la aplicación sincroniza en la nube con Firebase, **requiere conexión a internet** para funcionar en general.
+Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp Web o la app disponible). La app en sí se sirve desde tu servidor; para que el enlace de WhatsApp abra en el navegador necesitas **conexión a internet** hacia WhatsApp.
 
 ## Qué se probó
 
-- El arnés de pruebas completa **141 comprobaciones con 0 fallos** (las nuevas cubren los 18 clientes reales, los campos de red, la clasificación del mapa y la fusión de antenas fijas con clientes reales).
-- `node --check app.js` y `node --check red-mapa.js` pasan sin errores de sintaxis. `red-mapa.js` **se autoprotege cuando no hay `document`** (la lógica de DOM no se ejecuta en el arnés, solo se expone su función pura de clasificación).
+- **Pruebas automatizadas del backend:** `node --test` dentro de `server/` cubre login (contraseña incorrecta → 401, correcta → cookie de sesión), que las rutas `/api/*` y el WebSocket exigen sesión, el ida y vuelta `PUT`→`GET` por SQLite (preservando campos ricos del cliente y de pago) y la difusión por WebSocket entre dos clientes.
+- **Pruebas automatizadas de la migración:** `node --test` dentro de `scripts/` cubre el parseo de CSV (comillas y comas embebidas), el parseo de fechas, los mapeos de Estado y Tipo Internet, el mapeo de las 13 columnas del CSV (incluyendo SSID / Pass WiFi / Pass Modem / IP Principal) y las reglas de reconciliación CSV ↔ Firebase.
+- **Smoke del núcleo frontend:** `node -e "require('./app.js')"` carga el núcleo vía `globalThis.PCC` (41 claves) sin errores; `node --check app.js` y `node --check red-mapa.js` pasan sin errores de sintaxis. `red-mapa.js` **se autoprotege cuando no hay `document`** (la lógica de DOM no se ejecuta fuera del navegador, solo se expone su función pura de clasificación).
 - Carga del núcleo con un `localStorage` simulado: se siembran **18 clientes reales**; `formatoMoneda(500)` devuelve `$500.00` y `formatoFechaLarga("2026-09-29")` devuelve `29 de septiembre de 2026`.
 - **Dataset de los 18 reales:** el SEED tiene **exactamente 18 clientes**, **todos Activos**, con **exactamente un** socio **Octavio** que es **`casa 44 LIZBETH`** (el resto, Carlos); los clientes sin dato de red arrancan con **campos de red vacíos** (sin IP, tipo de conexión ni AP) y `tipoPago` por defecto en **"Directo"**.
 - **Mapeos concretos de red:** se verifica que los clientes con IP quedan bajo su AP/enlace correcto (por ejemplo *Nieto* `.38`, *Lupita casa 26* `.111` y *TIENDA INDOMABLE* `.129` en AP_OCTARED_3; *Reyes vecino* `.34` y *Jessy casa 43* `.40` en LiteAP AC-1; *Berenice* `.31` en LiteAP AC-2; *Mercedez RH* `.36` en PtP MERCEDES RH; *casa 44 LIZBETH* `.145` en PtP CASA 44).
 - **Clasificación del mapa** (`window.PCC_RED.clasificarClientes`): sobre el SEED de 18 produce **8 identificados** (los que traen IP, repartidos bajo su AP/enlace) y **10 pendientes**; un cliente con IP y `apId` conocido cae como identificado, y uno sin IP o con `apId` desconocido cae en pendientes.
 - **Fusión de antenas fijas y clientes** (`window.PCC_RED.fusionarAntenas`): AP OCTARED3 lista sus **6 antenas fijas** de la topología; sin clientes reales todas son filas de infraestructura; con un cliente real cuya IP coincide con una antena (`.111`) la fila pasa a **identificada** y toma el nombre del cliente **sin duplicar**, y un cliente con IP nueva se agrega como fila extra identificada.
 - Clasificación de estados correcta sobre los datos de ejemplo (vencidos, próximos y pagados).
-- Coherencia del criterio de "vencido": un cliente **Pausado** y atrasado **no** cuenta como vencido en ningún conteo, mientras que uno **Activo** y atrasado sí (verificado en el arnés de pruebas).
+- Coherencia del criterio de "vencido": un cliente **Pausado** y atrasado **no** cuenta como vencido en ningún conteo, mientras que uno **Activo** y atrasado sí.
 - Flujo de **Pagar**: tras registrar el pago, la fecha de próximo pago avanza al siguiente ciclo (mes siguiente respetando el día de pago).
 - `crearCliente` normaliza y autocalcula la fecha de próximo pago para un cliente nuevo.
 - **Campo socio**: `crearCliente` asigna **Carlos** por defecto, respeta **Octavio** cuando se indica y normaliza cualquier valor inválido a Carlos; el conjunto de los 18 reales tiene **exactamente un** cliente marcado "Octavio" (**`casa 44 LIZBETH`**) y el resto en Carlos.

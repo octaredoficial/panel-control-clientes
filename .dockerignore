@@ -29,11 +29,13 @@ docker-compose.yml
 server/Dockerfile
 Caddyfile
 
-# Integracion obsoleta (reemplazada por backend-sync.js en FEAT-004) y
-# configuracion de los servicios que se retiran en la migracion
-firebase-sync.js
-firestore.rules
-netlify.toml
+# Herramientas y datos de la migracion (se ejecutan en la maquina del
+# usuario, no dentro del contenedor del backend)
+scripts/
+export.json
+clientes-from-csv.json
+dataset-final.json
+*.csv
 
 # Documentacion (no se sirve desde el backend)
 README.md

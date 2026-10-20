@@ -293,8 +293,8 @@
         ssid: "OCTARED3", frecuencia: "5105 MHz", tipo: "AP",
         // Antenas FIJAS de infraestructura del AP (nombre + IP). Las que
         // tambien son clientes de cobro reales (Lupita casa 26, Tienda
-        // Indomable, NIETO) salen de los clientes de Firebase y se fusionan
-        // por IP (ver fusionarAntenas en red-mapa.js) para no duplicar.
+        // Indomable, NIETO) salen de los clientes del backend propio y se
+        // fusionan por IP (ver fusionarAntenas en red-mapa.js) para no duplicar.
         antenas: [
           { nombre: "Lupita casa 26", ip: "192.168.10.111" },
           { nombre: "CASA 30", ip: "192.168.10.100" },
@@ -324,7 +324,7 @@
     ],
     // Puntas de los enlaces PtP dedicados (1 a 1 con su cliente). 'antenas'
     // lista el cliente dedicado esperado como fila fija (se fusiona por IP
-    // con el cliente real de Firebase si existe).
+    // con el cliente real del backend propio si existe).
     puntas: [
       {
         id: RED_IDS.PTP_MERCEDES_RH, nombre: "PtP Mercedes RH", ip: "192.168.10.25", tipo: "PtP",
@@ -1348,14 +1348,15 @@
    *
    * IMPORTANTE: escribe a traves de las PROPIEDADES del namespace
    * (PCC.guardarClientes / PCC.guardarMovimientos / PCC.guardarConfig),
-   * NO de los closures internos. firebase-sync.js parchea esas propiedades
-   * para espejar a Firestore; si usaramos los closures internos el reinicio
-   * solo tocaria localStorage y los 18 clientes NO llegarian a la nube.
-   * Con las propiedades parcheadas, "Reiniciar datos de ejemplo" sobrescribe
-   * clientes y vacia movimientos tambien en Firestore. Si el namespace aun
-   * no esta disponible (p. ej. durante el arranque del nucleo), caemos a los
-   * closures internos para no romper. El flag _aplicandoSnapshot interno de
-   * firebase-sync sigue evitando reenviar snapshots remotos (no hay bucle).
+   * NO de los closures internos. backend-sync.js parchea esas propiedades
+   * para espejar el estado al servidor propio; si usaramos los closures
+   * internos el reinicio solo tocaria localStorage y los 18 clientes NO
+   * llegarian al backend. Con las propiedades parcheadas, "Reiniciar datos
+   * de ejemplo" sobrescribe clientes y vacia movimientos tambien en el
+   * backend. Si el namespace aun no esta disponible (p. ej. durante el
+   * arranque del nucleo), caemos a los closures internos para no romper. El
+   * flag _aplicandoSnapshot interno de backend-sync sigue evitando reenviar
+   * snapshots remotos (no hay bucle).
    */
   function reiniciarDatosEjemplo() {
     var ns = typeof PCC !== "undefined" && PCC ? PCC : null;
