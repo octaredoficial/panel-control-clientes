@@ -1,0 +1,16 @@
+# NOTA: la imagen se construye con el contexto en la RAIZ del repo
+# (docker build -f server/Dockerfile . ; docker-compose.yml usa context: .),
+# por lo que el .dockerignore EFECTIVO es el de la raiz (../.dockerignore).
+# Este archivo solo aplica si alguien construye con `server/` como contexto;
+# se deja por coherencia con lo que no debe empaquetarse del backend.
+
+node_modules
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.test.js
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store

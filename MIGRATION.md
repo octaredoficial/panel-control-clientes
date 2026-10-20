@@ -148,6 +148,31 @@ Claves de `localStorage` (fuente que lee la UI): `pcc.clientes`, `pcc.movimiento
 
 ---
 
+## 3.5 Despliegue (runbook)
+
+El **runbook de despliegue paso a paso** en el servidor Vultr (instalar Docker +
+Compose, clonar, crear `.env`, `docker compose up -d --build`, aceptar el
+certificado autofirmado en `https://64.177.92.121`, respaldos, logs y la
+verificación de que **no se interrumpe la VPN del MikroTik**) está en
+[`DEPLOY.md`](./DEPLOY.md). La contenedorización (Dockerfile, Caddyfile,
+`docker-compose.yml`, `.env.example`) se añade en **FEAT-003**.
+
+El stack son dos servicios en `docker-compose.yml` (raíz del repo):
+
+- **app** — backend Node 22 (`server/Dockerfile`, imagen `node:22-alpine`,
+  usuario no-root). SQLite en el volumen `pcc-data` montado en `/data`. **No
+  publica puertos**: solo lo alcanza Caddy por la red interna `pcc-net`.
+- **proxy** — Caddy (`caddy:2-alpine`) con `tls internal` (HTTPS autofirmado,
+  sin dominio ni Let's Encrypt). **Único** servicio que publica puertos (**80**
+  y **443**); el `:80` redirige a `:443`. **Sin `network_mode: host`** para no
+  colisionar con la VPN del MikroTik.
+
+> El `.env` real (con `APP_PASSWORD` y `SESSION_SECRET`) está en `.gitignore`;
+> usa `.env.example` como plantilla. Genera `SESSION_SECRET` con
+> `openssl rand -hex 32`.
+
+---
+
 ## 4. Alcance explícito de FEAT-001
 - **Sí:** línea base de pruebas (documentada), verificación de toolchain, y este ADR.
 - **No:** ningún cambio en `app.js`, `index.html`, `firebase-sync.js`, `styles.css` ni

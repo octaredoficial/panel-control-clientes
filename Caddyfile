@@ -1,0 +1,53 @@
+# ============================================================
+# Panel de Control de Clientes - Reverse proxy Caddy (HTTPS autofirmado)
+# ------------------------------------------------------------
+# Caddy termina TLS en :443 con un certificado AUTOFIRMADO generado por
+# su CA interna (`tls internal`), sin dominio y sin Let's Encrypt (ACME
+# necesita un nombre DNS verificable, imposible accediendo solo por IP).
+#
+# El navegador avisara UNA vez de que el certificado no es de confianza;
+# el usuario acepta la advertencia (decision ya tomada en MIGRATION.md).
+#
+# Caddy proxya HTTP y WebSocket al backend Node (servicio `app:8080` en
+# la red interna de docker compose). reverse_proxy reenvia de forma nativa
+# el upgrade de WebSocket de /ws, asi que la sync en vivo funciona sobre
+# wss:// sin configuracion extra.
+#
+# El backend NO se publica al host: solo Caddy expone 80/443. El :80
+# redirige a :443 para que http:// caiga en https://.
+# ============================================================
+
+{
+	# Sin email de ACME (no hay dominio); CA interna para el cert autofirmado.
+	# auto_https off evita cualquier intento de emitir cert publico por ACME.
+	auto_https off
+}
+
+# Escucha por IP, sin nombre de dominio: el bloque :443 atiende cualquier host.
+:443 {
+	# Certificado autofirmado por la CA interna de Caddy (una linea).
+	tls internal
+
+	# Cabeceras de seguridad (ademas de las que ya fija el backend).
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# HSTS desactivado a proposito: con cert autofirmado por IP no aporta
+		# y puede complicar la aceptacion manual del certificado.
+		-Server
+	}
+
+	# Proxy a backend + WebSocket (/ws se reenvia con upgrade automatico).
+	reverse_proxy app:8080
+
+	# Logs al stdout del contenedor (visibles con docker compose logs proxy).
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Redirige http://IP -> https://IP (puerto 80 -> 443).
+:80 {
+	redir https://{host}{uri} permanent
+}

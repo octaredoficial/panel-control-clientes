@@ -3,3 +3,16 @@
 node_modules/
 *.log
 .DS_Store
+
+# Secretos reales del despliegue (usa .env.example como plantilla)
+.env
+.env.*
+!.env.example
+
+# Base de datos SQLite local (en produccion vive en el volumen de Docker)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+server/*.sqlite
+server/*.sqlite-shm
+server/*.sqlite-wal
