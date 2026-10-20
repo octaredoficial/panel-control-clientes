@@ -15,9 +15,9 @@
 ## 1. Línea base del proyecto (estado actual)
 
 - **App:** HTML + CSS + JavaScript puro (vanilla), **sin bundler** ni dependencias de build.
-- **Núcleo lógico:** `app.js` expone un namespace global `window.PCC` (41 funciones: modelo,
-  cálculos de negocio, reparto Carlos/Octavio, recibos/folios, persistencia, siembra). El IIFE
-  cae a `globalThis.PCC` cuando no hay `window`, por lo que el núcleo **es cargable bajo Node**.
+- **Núcleo lógico:** `app.js` expone un namespace global `window.PCC` (modelo, cálculos de
+  negocio, recibos/folios, persistencia, siembra). El IIFE cae a `globalThis.PCC` cuando no hay
+  `window`, por lo que el núcleo **es cargable bajo Node**.
 - **Integración nube (único punto Firebase):** `firebase-sync.js` (seam a reemplazar).
 - **Hosting/DB actuales:** Netlify (estático) + Firestore (datos) + Firebase Auth (login Google/anónimo).
 
@@ -124,27 +124,36 @@ Claves de `localStorage` (fuente que lee la UI): `pcc.clientes`, `pcc.movimiento
 
 ### 3.1 Esquema de cliente actual (de `crearCliente` en `app.js`)
 `id`, `nombre`, `celular`, `direccion`, `ip`, `tipoConexion` (`'AP'|'PtP'|'Modem'|''`), `apId`,
-`megas`, `monto` (number), `fechaInstalacion` (ISO), `diaPago` (1–31), `tipoPago` (`'PTP'|'Directo'`),
-`estatus` (`'Activo'|'Pausado'`), `socio` (`'Carlos'|'Octavio'`), `fechaProximoPago` (ISO),
-`ultimoPago` (ISO|`''`).
+`megas`, `monto` (number), `fechaInstalacion` (ISO), `diaPago` (1–31),
+`estatus` (`'Activo'|'Pausado'`), `fechaProximoPago` (ISO), `ultimoPago` (ISO|`''`), y los campos
+ricos del CSV `ssid`, `passWifi`, `passModem`, `ipPrincipal`.
+
+> El panel es **single-tenant**: ya **no** existen los campos `socio` (Carlos/Octavio) ni el
+> `tipoPago` financiero (PTP/Directo). Todo el dinero es de Octavio y no hay reparto entre socios.
 
 ### 3.2 Esquema de movimiento
 `id`, `tipo` (`gasto|ingreso|ahorro`), `concepto`, `monto`, `fecha` (ISO); y para pagos además
 `esPago:true`, `folio`, `periodo` (`'YYYY-MM'`), `clienteId`, `prevUltimoPago`, `prevFechaProximoPago`.
 
 ### 3.3 Objeto de configuración
-`diasAviso`, `moneda`, `costoAntena`, `numAntenas`, `costoLuz`, `luzPeriodicidadMeses`,
-`luzMesAncla`, `nombreNegocio`, `telefonoContacto`, `direccionNegocio`, `mensajePie`.
+`diasAviso`, `moneda`, `nombreNegocio` (por defecto **"OCTARED"**), `telefonoContacto`,
+`direccionNegocio`, `mensajePie`.
+
+> Ya **no** hay claves de gastos fijos (`costoAntena`, `numAntenas`, `costoLuz`,
+> `luzPeriodicidadMeses`, `luzMesAncla`): se eliminaron junto con el reparto entre socios.
 
 ### 3.4 Datos a migrar y campos más ricos del CSV (→ FEAT-005)
-- Se migran los **clientes existentes** desde el **CSV del usuario (~29 clientes)** reconciliados
-  con lo que haya en **Firestore** (export que corre el **usuario**, ya que el sandbox no alcanza
-  Firestore).
-- El **CSV trae campos más ricos** que el esquema actual de cliente: **SSID**, **Pass WiFi**,
+- La carga es **solo desde el CSV del usuario (~29 clientes), partiendo de cero**. La base de
+  datos de **Firestore NO se migra**: sus colecciones reales de clientes, reportes y transacciones
+  se **ignoran** a propósito (ver el runbook en 3.7).
+- El **CSV trae campos más ricos** que el esquema previo de cliente: **SSID**, **Pass WiFi**,
   **Pass Modem** e **IP Principal** (además de Nombre, Teléfono, Dirección, Plan, Mensualidad,
   Próximo Pago, Estado, Tipo Internet, IP Cliente). Para **no perder ningún dato**, se requiere una
   **extensión del esquema de cliente** (nuevos campos `ssid`, `passWifi`, `passModem`, `ipPrincipal`)
   y de su ficha/formulario. **Esa extensión se hace en FEAT-005**, no en esta feature.
+- Los valores "sucios" del CSV (por ejemplo una IP con texto extra como
+  `192.168.6.87    STEREN:8888`) se cargan **literalmente, sin limpiar**; la limpieza se hace
+  más tarde desde la propia app.
 
 ---
 
@@ -214,10 +223,10 @@ Luego, en el navegador (dos pestañas contra el **mismo** backend):
 3. **Pagos:** registra un pago y revisa que, tras recargar (`GET /api/state`),
    persisten `folio`, `periodo` y los campos `prevUltimoPago` /
    `prevFechaProximoPago`; prueba también **revertir** el pago.
-4. **Reparto Carlos/Octavio**, **mapa de red** (lee `PCC.cargarClientes` +
-   `TOPOLOGIA`), **modo oscuro** (el tema se sincroniza entre pestañas),
-   **exportar CSV** e **historial**: todo sigue funcionando porque la capa de datos
-   de `app.js` no cambió; solo cambió el módulo de sync.
+4. **Mapa de red** (lee `PCC.cargarClientes` + `TOPOLOGIA`), **modo oscuro** (el
+   tema se sincroniza entre pestañas), **exportar CSV** e **historial**: todo sigue
+   funcionando porque la capa de datos de `app.js` no cambió; solo cambió el módulo
+   de sync.
 5. **Logout:** pulsa «Cerrar sesión» → se cierra la sesión, se cierra el WebSocket
    y reaparece el overlay de contraseña.
 
@@ -230,18 +239,21 @@ Luego, en el navegador (dos pestañas contra el **mismo** backend):
 
 ---
 
-## 3.7 Migración de datos (FEAT-005): runbook completo
+## 3.7 Migración de datos: runbook CSV-only desde cero
 
-La migración reconcilia **dos fuentes** en el nuevo SQLite, sin perder ningún
-campo:
+La carga de datos parte **de una sola fuente**: el **CSV del usuario** (~29
+clientes), con campos más ricos que el formulario original. Se carga **desde cero**
+en el nuevo SQLite.
 
-1. El **CSV del usuario** (~29 clientes) con campos más ricos que el formulario
-   actual.
-2. Lo que haya hoy en **Firestore** (proyecto `panel-clientes-12a4a`).
+> **Firestore NO se migra.** La base de datos real de Firestore (proyecto
+> `panel-clientes-12a4a`) y sus colecciones de clientes, reportes y transacciones se
+> **abandonan a propósito**: no se exportan, no se reconcilian y no se cargan. No
+> hace falta `serviceAccount.json` ni `firebase-admin`, y el script
+> `export-firestore.mjs` ya **no** existe.
 
-Como el sandbox no alcanza Firestore ni recibe el CSV, esta feature **produce las
-herramientas** que **corre el usuario** y **extiende el esquema de cliente** para
-guardar los campos nuevos.
+Como el sandbox no recibe el CSV con datos reales, esta parte **produce las
+herramientas** que **corre el usuario** y mantiene el esquema de cliente con los
+campos ricos del CSV.
 
 ### 3.7.1 Extensión del esquema de cliente
 
@@ -287,74 +299,49 @@ Tipo Internet, IP Cliente, IP Principal, SSID, Pass WiFi, Pass Modem
 | `Pass Modem`    | `passModem`        | campo nuevo |
 
 Las **13 columnas** se mapean; no se descarta ninguna. Campos del modelo sin
-columna en el CSV (`apId`, `socio`, `diaPago`, `fechaInstalacion`,
-`ultimoPago`, `tipoPago`) quedan con sus valores por defecto y, si el cliente
-también existe en Firestore, se completan desde allí (ver regla de
-reconciliación).
+columna en el CSV (`apId`, `diaPago`, `fechaInstalacion`, `ultimoPago`) quedan con
+sus valores por defecto; se pueden completar más tarde desde la ficha del cliente
+en la app.
 
-### 3.7.3 Regla de reconciliación (CSV ↔ Firestore)
+Los valores se cargan **literalmente** (solo se recorta el espacio exterior): si una
+celda trae texto "sucio" (p. ej. una IP como `192.168.6.87    STEREN:8888`), se
+guarda **tal cual** y la limpieza se hace después dentro de la app.
 
-Implementada y probada en `scripts/lib-mapeo.mjs` (`reconciliarClientes`):
+### 3.7.3 Qué se carga y qué se ignora
 
-- **Cotejo:** por `IP Cliente` (campo `ip`) si ambos la tienen; si no, por
-  **nombre normalizado** (minúsculas, sin acentos, sin espacios repetidos).
-- **Campos ricos** (`ssid`, `passWifi`, `passModem`, `ipPrincipal`, `megas`,
-  `monto`, `direccion`, `celular`, `tipoConexion`): **gana el CSV** cuando trae
-  valor; si el CSV lo deja vacío, se conserva el de Firestore.
-- **Campos derivados del historial de pagos** (`fechaProximoPago`, `ultimoPago`,
-  `diaPago`, `apId`, `socio`, `fechaInstalacion`, `tipoPago`): **gana Firestore**
-  cuando trae valor.
-- **`id`:** si hay par, se conserva el **id de Firestore** (para no romper las
-  referencias `clienteId` de los movimientos); si el cliente solo está en el CSV,
-  se usa el id generado por el importador.
-- **Nunca** se descarta un cliente presente en una sola fuente.
-- **`movimientos`, `config` y `theme`** vienen **solo de Firestore**.
-
-Todo conflicto (mismo campo con valores distintos) se **imprime** en el resumen;
-nunca se borra en silencio.
+- Se cargan **solo los clientes del CSV** (`clientes-from-csv.json`), tal cual los
+  produce `import-csv.mjs`, sin limpiar los valores sucios.
+- `movimientos` arranca **vacío** (`[]`): no hay historial de pagos que migrar.
+- `config` se carga con `nombreNegocio` **"OCTARED"** (y el resto de valores por
+  defecto); `theme` arranca en **`claro`**.
+- **Firestore se ignora por completo**: no hay export, ni reconciliación, ni cotejo
+  por IP/nombre. Los `id` de cliente son los que genera el importador del CSV.
 
 ### 3.7.4 Orden de operaciones (lo que corre el usuario)
 
 Correr desde el directorio del repo, en la máquina del usuario (no en el sandbox):
 
-**Paso 1 — Exportar Firestore** (necesita internet + credenciales):
-
-```bash
-npm i firebase-admin            # solo para el export
-export GOOGLE_APPLICATION_CREDENTIALS=/ruta/al/serviceAccount.json
-node scripts/export-firestore.mjs      # escribe export.json
-```
-
-Descarga el `serviceAccount.json` desde la consola de Firebase
-(Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada).
-
-> **Respalda `export.json`** en un lugar seguro **antes** de desmantelar Firebase.
-> Es tu única copia de la base de datos actual.
-
-**Paso 2 — Importar el CSV**: coloca el CSV del usuario en el repo (p. ej.
+**Paso 1. Importar el CSV**: coloca el CSV del usuario en el repo (p. ej.
 `clientes.csv`, con las 13 cabeceras de 3.7.2) y:
 
 ```bash
 node scripts/import-csv.mjs clientes.csv     # escribe clientes-from-csv.json
 ```
 
-**Paso 3 — Reconciliar y sembrar** en el backend ya corriendo (ver DEPLOY.md).
-Primero en seco para revisar el resumen y el dataset final:
+**Paso 2. Cargar en el backend ya corriendo** (ver DEPLOY.md). Primero en seco
+para revisar el resumen y el dataset final, sin tocar el backend:
 
 ```bash
 node scripts/merge-and-seed.mjs \
-  --firestore export.json \
   --csv clientes-from-csv.json \
   --out dataset-final.json \
   --dry-run
 ```
 
-Si el resumen (emparejados / solo-CSV / solo-Firestore / conflictos) se ve bien,
-carga de verdad al backend:
+Si el resumen (número de clientes cargados) se ve bien, carga de verdad al backend:
 
 ```bash
 node scripts/merge-and-seed.mjs \
-  --firestore export.json \
   --csv clientes-from-csv.json \
   --base-url https://64.177.92.121 \
   --password "TU_APP_PASSWORD" \
@@ -365,11 +352,19 @@ node scripts/merge-and-seed.mjs \
 `PUT /api/movimientos`, `PUT /api/config` y `PUT /api/theme`
 (reemplazo de colección completa, el mismo contrato que usa `backend-sync.js`).
 
+> **Cuidado: la carga es desde cero y sobrescribe.** Cada `PUT` reemplaza la
+> colección completa en el backend, no la fusiona. Volver a correr
+> `merge-and-seed.mjs` contra un backend ya poblado **pisa** `clientes`,
+> `movimientos`, `config` y `theme` con el dataset del CSV; en particular,
+> `config` queda reducido a `nombreNegocio` **"OCTARED"** (más los valores por
+> defecto), perdiendo cualquier configuración más rica que hubiera. Es el
+> comportamiento buscado para una carga inicial desde cero, pero evita
+> re-ejecutarlo sobre datos reales que quieras conservar.
+
 ### 3.7.5 Verificar los conteos tras la carga
 
-1. En la terminal, el resumen de `merge-and-seed.mjs` imprime
-   `Clientes finales` y `Movimientos (FS)`; compáralos con los esperados
-   (~29 clientes).
+1. En la terminal, el resumen de `merge-and-seed.mjs` imprime el número de
+   **clientes** cargados; compáralo con lo esperado (~29 clientes).
 2. Comprueba el estado del backend directamente:
 
    ```bash
@@ -387,9 +382,9 @@ node scripts/merge-and-seed.mjs \
    cliente migrado: los campos SSID / Pass WiFi / Pass Modem / IP Principal deben
    aparecer poblados.
 
-> **Datos reales fuera de git.** `export.json`, `clientes-from-csv.json`,
-> `dataset-final.json` y cualquier CSV con datos de clientes **no se versionan**
-> (ver `.gitignore`); son archivos de trabajo locales del usuario.
+> **Datos reales fuera de git.** `clientes-from-csv.json`, `dataset-final.json` y
+> cualquier CSV con datos de clientes **no se versionan** (ver `.gitignore`); son
+> archivos de trabajo locales del usuario.
 
 ---
 

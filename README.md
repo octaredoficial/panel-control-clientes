@@ -67,7 +67,7 @@ El **servidor propio** es la fuente de verdad. El `localStorage` del navegador a
 - **Estructura de datos en el servidor** (tablas SQLite, cada registro guardado como objeto JSON completo para no perder campos):
   - Tabla **`clientes`**: un registro por cliente (el `id` del cliente es la clave).
   - Tabla **`movimientos`**: un registro por movimiento (gastos, ingresos, ahorros y pagos; el `id` del movimiento es la clave).
-  - Fila **`config`**: el objeto de configuración (días de aviso, moneda, gastos fijos, etc.).
+  - Fila **`config`**: el objeto de configuración (días de aviso, moneda, datos del negocio, etc.).
   - Fila **`theme`**: el tema, con la forma `{ valor: 'claro' | 'oscuro' }`.
 - **Degradación segura:** si el backend no responde, la app no se rompe; muestra un mensaje en español y el WebSocket reintenta reconectar.
 
@@ -80,7 +80,7 @@ La **primera vez** que entras y el **servidor está vacío** (sin clientes ni mo
 
 Si el servidor **ya tiene datos**, la app **no los duplica ni los sobrescribe**: el backend es la fuente de verdad y simplemente se refleja en cada dispositivo.
 
-Para cargar tus clientes reales (desde el CSV y/o una exportación de Firebase anterior) usa las herramientas de migración descritas en [`MIGRATION.md`](./MIGRATION.md) (scripts en [`scripts/`](./scripts)).
+Para cargar tus clientes reales (solo desde el CSV, partiendo de cero) usa las herramientas de migración descritas en [`MIGRATION.md`](./MIGRATION.md) (scripts en [`scripts/`](./scripts)).
 
 ## Despliegue en el servidor
 
@@ -88,13 +88,14 @@ El despliegue en tu servidor Vultr (Ubuntu, IP `64.177.92.121`) está documentad
 
 ## Migración de datos
 
-Para traer tus clientes existentes al nuevo backend hay herramientas en [`scripts/`](./scripts) y el runbook completo en [`MIGRATION.md`](./MIGRATION.md):
+Para cargar tus clientes reales al nuevo backend hay herramientas en [`scripts/`](./scripts) y el runbook completo en [`MIGRATION.md`](./MIGRATION.md). La carga es **solo desde el CSV, partiendo de cero**: la base de datos de Firestore **no** se migra (sus colecciones de clientes, reportes y transacciones se **ignoran** a propósito).
 
-- `scripts/export-firestore.mjs` — exporta tus datos de Firebase (lo ejecutas tú con tus credenciales) a `export.json`.
-- `scripts/import-csv.mjs` — convierte tu CSV de clientes (Nombre, Telefono, Direccion, Plan, Mensualidad, Proximo Pago, Estado, Tipo Internet, IP Cliente, IP Principal, SSID, Pass WiFi, Pass Modem) a objetos cliente.
-- `scripts/merge-and-seed.mjs` — reconcilia ambas fuentes y carga el resultado en el backend.
+- `scripts/import-csv.mjs`: convierte tu CSV de clientes (Nombre, Telefono, Direccion, Plan, Mensualidad, Proximo Pago, Estado, Tipo Internet, IP Cliente, IP Principal, SSID, Pass WiFi, Pass Modem) a objetos cliente en `clientes-from-csv.json`.
+- `scripts/merge-and-seed.mjs`: carga esos clientes en el backend (movimientos vacíos, `config` con `nombreNegocio` **"OCTARED"** y tema claro), con `--dry-run` para revisar antes.
 
-Los archivos con datos reales (`export.json`, `clientes-from-csv.json`, `*.csv`) están en `.gitignore` y **no se suben al repo**. Recuerda **respaldar `export.json`** antes de dar de baja Firebase.
+Los valores "sucios" del CSV (por ejemplo una IP con texto extra como `192.168.6.87    STEREN:8888`) se cargan **literalmente, tal cual**, y se limpian más tarde desde la propia app.
+
+Los archivos con datos reales (`clientes-from-csv.json`, `*.csv`) están en `.gitignore` y **no se suben al repo**.
 
 ## Verificación manual en el navegador
 
@@ -103,7 +104,7 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 1. Abre **https://64.177.92.121** (o `https://localhost` en local) y acepta el certificado autofirmado.
 2. **Inicia sesión** con tu contraseña única (`APP_PASSWORD`). Verifica que la pantalla de acceso desaparece y aparece la app. Prueba también una **contraseña incorrecta** y confirma que muestra el error en español sin abrir la app.
 3. **Sincronización en vivo:** en un dispositivo/navegador logueado, **da de alta o edita un cliente**; en otro dispositivo/navegador (también con sesión iniciada) comprueba que el cambio **aparece solo**, sin recargar.
-4. **Pagar y revertir:** registra un **pago** de un cliente y luego pulsa **↩️ Revertir**; confirma que el Resumen y el Reparto se recalculan y que el cambio se refleja en el otro dispositivo.
+4. **Pagar y revertir:** registra un **pago** de un cliente y luego pulsa **↩️ Revertir**; confirma que el Resumen se recalcula y que el cambio se refleja en el otro dispositivo.
 5. **Persistencia desde el servidor:** **recarga** la página y confirma que los datos siguen ahí (vienen del backend, no solo del navegador).
 6. **Modo oscuro:** alterna el tema con 🌙 / ☀️ y comprueba que se recuerda y se sincroniza.
 7. **Consola del navegador:** debe quedar **sin errores**.
@@ -129,8 +130,7 @@ Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-
   - **Egresos**: gastos registrados del mes.
   - **Ganancia Neta**: ingresos menos egresos.
   - **Por cobrar (hasta fin de mes)**: suma de los montos de clientes activos cuyo pago vence hasta el fin del mes seleccionado y aún no están pagados.
-- **Reparto de fin de mes** (panel justo debajo del Resumen): calcula cómo se divide la ganancia del mes entre los dos socios, **Carlos** y **Octavio**. Comparte la navegación de mes del Resumen (usa el mes seleccionado con `‹` / `›`) y se recalcula al cambiar de mes o al registrar un pago o un gasto. Ver [Reparto de fin de mes entre socios](#reparto-de-fin-de-mes-entre-socios).
-- **Estadísticas**: clientes activos y pausados, y un desplegable con estadísticas del mes (al corriente, vencidos, pagos cobrados, PTP, Directo y ahorro acumulado). *Pagos cobrados este mes* cuenta únicamente los cobros registrados con el botón **Pagar** de una tarjeta de cliente; un ingreso capturado a mano con **Nuevo Ingreso** suma a *Ingresos* pero no a este contador.
+- **Estadísticas**: clientes activos y pausados, y un desplegable con estadísticas del mes (al corriente, vencidos, pagos cobrados y ahorro acumulado). *Pagos cobrados este mes* cuenta únicamente los cobros registrados con el botón **Pagar** de una tarjeta de cliente; un ingreso capturado a mano con **Nuevo Ingreso** suma a *Ingresos* pero no a este contador.
 - **Pagos próximos o vencidos**: lista ordenada por urgencia (lo más vencido primero), con el total de vencidos en la cabecera y un aviso configurable de "N días antes".
 
 > **Criterio de "vencido"**: un cliente se considera vencido solo si está **Activo** y su fecha de pago ya pasó. Un cliente **Pausado** nunca cuenta como vencido (no se le cobra mientras está en pausa), y este mismo criterio se aplica de forma coherente en el chip *Vencidos*, en la estadística de vencidos y en el panel de Pagos.
@@ -138,7 +138,7 @@ Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-
 > El **estado de pago** de los clientes (vencido / próximo / pagado), las **estadísticas** y el panel de **Pagos** se calculan siempre **a la fecha de hoy**, aunque navegues a otros meses con `‹` / `›`. La navegación de mes solo afecta a las métricas del resumen (Ingresos, Egresos, Ganancia y Por cobrar) y al detalle de movimientos. Por eso los paneles de Estadísticas y Pagos muestran la etiqueta *"a la fecha de hoy"*.
 - **Clientes activos y pausados**:
   - **Búsqueda** por nombre, teléfono, dirección o IP.
-  - **Filtros** (chips) con conteos: Todos, Activos, Pausados, Vencidos, PTP, Directo.
+  - **Filtros** (chips) con conteos: Todos, Activos, Pausados, Vencidos.
   - **Orden**: por próximo pago (predeterminado), por nombre o por monto.
   - **Exportar a CSV**: descarga el archivo `clientes.csv`.
 - **Acciones por cliente** (en cada tarjeta):
@@ -148,10 +148,10 @@ Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-
   - **Editar**: abre el formulario del cliente con sus datos cargados.
   - **Pausar / Reanudar**: alterna el estatus del cliente.
   - **Eliminar**: pide confirmación antes de borrar.
-- **Nuevo Cliente**: formulario con validación en español (**nombre, monto y día de pago** son obligatorios; el **celular es opcional**, para poder registrar clientes sin número, como varios de los 18 reales, y asignarles IP/AP desde su ficha). Incluye el campo **Pagado a** (ver [el campo "socio"](#el-campo-socio-pagado-a)).
+- **Nuevo Cliente**: formulario con validación en español (**nombre, monto y día de pago** son obligatorios; el **celular es opcional**, para poder registrar clientes sin número, como varios de los 18 reales, y asignarles IP/AP desde su ficha).
 - **Movimientos**: registrar **Gastos**, **Ingresos** y **Ahorros**. El panel de detalle tiene pestañas que filtran por tipo, calculan el total del mes y muestran un estado vacío adecuado.
 - **Modo oscuro**: el botón 🌙 / ☀️ alterna el tema y lo recuerda al recargar.
-- **Configuración**: ajusta los **días de aviso**, la **moneda** y los **gastos fijos del negocio** (ver [Gastos fijos configurables](#gastos-fijos-configurables)), y permite **reiniciar los datos de ejemplo**.
+- **Configuración**: ajusta los **días de aviso** y la **moneda**, edita los **datos del negocio (recibo)** y permite **reiniciar los datos de ejemplo**.
 
 ## Revertir / deshacer un pago
 
@@ -159,7 +159,7 @@ Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-
 
 1. En la tarjeta del cliente aparece el botón **↩️ Revertir** (solo se muestra si ese cliente tiene un pago registrado que se pueda deshacer).
 2. Al pulsarlo se pide **confirmación**. Si aceptas, el cliente **vuelve a quedar exactamente como estaba antes del pago**: se borra el movimiento del cobro y se restauran su *último pago* y su *fecha de próximo pago* previos.
-3. Como el cobro se elimina de los movimientos, el **Resumen del mes**, las **Estadísticas** (incluido *Pagos cobrados este mes*) y el **Reparto de fin de mes** se recalculan solos.
+3. Como el cobro se elimina de los movimientos, el **Resumen del mes** y las **Estadísticas** (incluido *Pagos cobrados este mes*) se recalculan solos.
 
 **Cómo funciona por dentro:** al registrar un pago, la aplicación guarda dentro del propio movimiento el estado previo del cliente (`prevUltimoPago` y `prevFechaProximoPago`). Revertir simplemente borra ese movimiento y restaura esos valores tal cual, sin tener que recalcular nada, de modo que la reversión es exacta.
 
@@ -174,7 +174,7 @@ Cada pago que registras genera un **recibo** y queda guardado en el **historial 
 En la tarjeta de cada cliente aparece el botón **📜 Historial**. Al pulsarlo se abre una ventana con:
 
 - Un **estado de cuenta** con cuatro datos: **Total pagado** (suma histórica de todos sus pagos cobrados), **Último pago**, **Próximo vencimiento** y **Estado actual** (**al corriente** o **vencido**, con el mismo criterio que el resto de la app: solo un cliente **Activo** y atrasado cuenta como vencido).
-- La **lista de pagos** del cliente ordenada de más reciente a más antiguo. Cada fila muestra la **fecha** del pago, el **periodo** (mensualidad) que cubre, el **monto**, el **socio** al que pagó y el **folio** del recibo.
+- La **lista de pagos** del cliente ordenada de más reciente a más antiguo. Cada fila muestra la **fecha** del pago, el **periodo** (mensualidad) que cubre, el **monto** y el **folio** del recibo.
 - Botones por fila para **🧾 Ver recibo** (reimprime o reenvía ese recibo) y **↩️ Revertir** (solo en el último pago reversible del cliente, igual que en la tarjeta).
 
 Si el cliente aún no tiene pagos, se muestra un aviso de historial vacío.
@@ -212,7 +212,7 @@ El botón **💬 Enviar por WhatsApp** abre un enlace **`https://wa.me/<número>
 
 Los textos que salen en el recibo se editan desde el modal de **Configuración ⚙️**, bajo **"Datos del negocio (recibo)"**. Son cuatro campos, con **valores genéricos por defecto** que puedes personalizar cuando quieras:
 
-- **`nombreNegocio`**: nombre comercial que encabeza el recibo. Por defecto **"Mi WISP"**.
+- **`nombreNegocio`**: nombre comercial que encabeza el recibo. Por defecto **"OCTARED"**.
 - **`telefonoContacto`**: teléfono de contacto del negocio (texto libre). Vacío por defecto.
 - **`direccionNegocio`**: domicilio o referencia del negocio. Vacío por defecto.
 - **`mensajePie`**: línea de agradecimiento al pie del recibo. Por defecto **"Gracias por su preferencia."**.
@@ -225,74 +225,18 @@ Los campos nuevos (**`folio`** y **`periodo`**) viajan **dentro del propio objet
 
 Los **pagos antiguos** (registrados antes de esta fase, **sin folio ni periodo**) siguen funcionando: al verlos o reimprimir su recibo se aplica un **fallback** que muestra el folio como **"sin folio"** y deriva el periodo del **mes de la fecha del pago**.
 
-## Reparto de fin de mes entre socios
-
-El negocio es de dos socios, **Carlos** y **Octavio**, que reparten la ganancia al cierre de cada mes. El panel **Reparto de fin de mes** aplica la fórmula que acordaron.
-
-### El campo "socio" (Pagado a)
-
-Cada cliente tiene un campo **"Pagado a"** (socio) que indica a quién le paga directamente: **Carlos** (valor por defecto) u **Octavio**. En la práctica casi todos los clientes pagan a Carlos; solo hay un cliente que le paga directamente a Octavio y esa mensualidad es 100% suya.
-
-- Al crear un cliente nuevo, el campo arranca en **Carlos**.
-- Los clientes antiguos guardados antes de esta versión (datos "v1" sin el campo) **migran automáticamente a "Carlos"** al cargarse. Cualquier valor inválido también cae en "Carlos".
-- La tarjeta de cada cliente muestra de forma discreta **"Paga a: Carlos"** o **"Paga a: Octavio"**.
-
-### Gastos fijos configurables
-
-Los gastos fijos del negocio se descuentan del total **antes** de repartir, es decir, los **absorben los dos socios al 50/50**. Son configurables desde el modal de **Configuración**, bajo *Gastos fijos del negocio*:
-
-- **Starlink**: `Número de antenas × Costo por antena`. Por defecto **2 antenas × $1,305 = $2,610 fijo todos los meses**.
-- **Luz**: **$300** que se paga **cada dos meses** (periodicidad configurable), empezando en el **mes ancla** (por defecto **noviembre de 2025**).
-
-**Patrón exacto de la luz** (con los valores por defecto): la luz aplica cuando el número de meses transcurridos desde el mes ancla es múltiplo de la periodicidad. Con ancla `2025-11` y periodicidad `2`:
-
-| Mes | ¿Paga luz? |
-| --- | --- |
-| noviembre 2025 | **Sí** ($300) |
-| diciembre 2025 | No ($0) |
-| enero 2026 | **Sí** ($300) |
-| febrero 2026 | No ($0) |
-| marzo 2026 | **Sí** ($300) |
-| … | … |
-
-Es decir: noviembre, enero, marzo, mayo, julio y septiembre pagan luz; los meses intermedios no.
-
-### Fórmula del reparto
-
-Para el mes seleccionado, el reparto se calcula paso a paso:
-
-```
-Ingresos del mes (pagos cobrados)
-  − Starlink (antenas)
-  − Luz (solo los meses que aplica)
-  − Pagos directos a Octavio
-  = Ganancia a repartir
-  ÷ 2  → mitad para cada socio
-
-Total Carlos  = su mitad
-Total Octavio = su mitad + sus pagos directos
-```
-
-- **Carlos** recibe su mitad de la ganancia a repartir.
-- **Octavio** recibe su mitad **más** los pagos directos de los clientes marcados como suyos (ese dinero se aparta del reparto 50/50 y va completo a Octavio).
-
-> **Importante — qué cuenta como "Ingresos del mes" en el reparto:** se basa en los **pagos cobrados de clientes**, es decir, los movimientos registrados con el botón **Pagar** de una tarjeta (`esPago = true`) cuya fecha cae en el mes seleccionado. Esto es coherente con la métrica *Pagos cobrados este mes* de las Estadísticas. Un **ingreso capturado a mano** con **Nuevo Ingreso** suma a la métrica *Ingresos* del Resumen, pero **no** entra en el reparto. Además, un pago solo se atribuye a Octavio si el movimiento quedó asociado a un cliente marcado "Octavio"; el botón **Pagar** guarda esa asociación automáticamente.
-
 ## Datos precargados: los 18 clientes reales de OCTARED
 
 Ya **no** se cargan clientes ficticios de demostración. El conjunto de datos ahora son **exactamente los 18 clientes reales de OCTARED**, tomados de la lista del negocio (que coincide con el diagrama de red). Son estos:
 
 *Cresencia caraos casa P4*, *VECINA YOLANDA CASA 15*, *Hermelinda*, *MICAELA HERNANDEZ CASA 54*, *casa 44 LIZBETH*, *Daniel casa 44*, *Nieto*, *Lupita casa 26 alado de nieto*, *Gabriela*, *URIEL*, *Reyes vecino*, *TIENDA INDOMABLE*, *Mercedez RH*, *Berenice*, *Jessy casa 43*, *Obed*, *VECINO DE BRANDON* y *CASA 17 CARMEN LAVANDERIA*.
 
-Reglas con las que se cargan:
+El panel es **de un solo negocio (single-tenant)**: todo el dinero es de **Octavio**, sin reparto entre socios. Reglas con las que se cargan:
 
 - **Todos quedan en estado Activo.** Ninguno arranca pausado.
-- **El único que paga directamente a Octavio es `casa 44 LIZBETH`** (socio **Octavio**); el resto paga a **Carlos**. Esto es lo que usa el [Reparto de fin de mes](#reparto-de-fin-de-mes-entre-socios).
 - **Instalación en $0** para todos (no se cobra instalación en este alta).
 - **Monto, megas y día de pago** son los reales de cada cliente (por ejemplo, *Nieto* 20 MB $600, *Reyes vecino* 30 MB $600, *Mercedez RH* 10 MB $400). El día de pago se deriva de la fecha de instalación.
 - **Estado de pago realista:** los marcados como "al corriente" o "en curso" quedan con un pago reciente y su próximo vencimiento a futuro; los que "deben" quedan como **Vencido** (vencimiento ya pasado y sin pago del ciclo).
-
-> **Decisión sobre `tipoPago` (financiero PTP/Directo):** como la lista real no trae este dato, los 18 clientes se cargan con `tipoPago = "Directo"` por defecto. Este campo es solo una **etiqueta financiera informativa** (y alimenta los chips y estadísticas de PTP/Directo); **no altera el reparto entre socios**, que depende únicamente del campo **socio** (Carlos / Octavio). Puedes cambiar el `tipoPago` de cada cliente cuando quieras desde su ficha sin que eso afecte las cuentas del reparto.
 
 Puedes editar, pausar, borrar o completar los datos de cada cliente (incluidos los [campos de red](#campos-de-red-en-la-ficha-del-cliente)); todo queda guardado en el servidor y sincronizado entre dispositivos.
 
@@ -391,7 +335,7 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 La **fuente de verdad** es el **backend propio** (SQLite en tu servidor). El **`localStorage`** del navegador actúa como **espejo / caché local** para que la interfaz siga siendo **instantánea**: la pantalla lee de ese espejo de forma síncrona, mientras `backend-sync.js` mantiene el espejo al día con los datos remotos y propaga al servidor cada cambio que haces.
 
 - En el servidor, los datos se guardan en las tablas **`clientes`** y **`movimientos`** y en las filas **`config`** y **`theme`** (ver [Sincronización en vivo (WebSocket)](#sincronización-en-vivo-websocket)).
-- En el navegador, el espejo local vive bajo claves con prefijo `pcc.` (`pcc.clientes`, `pcc.movimientos`, `pcc.config`, `pcc.theme`). La configuración (`pcc.config`) incluye los gastos fijos del negocio (`costoAntena`, `numAntenas`, `costoLuz`, `luzPeriodicidadMeses`, `luzMesAncla`), que se añaden con sus valores por defecto a cualquier configuración antigua que no los tuviera.
+- En el navegador, el espejo local vive bajo claves con prefijo `pcc.` (`pcc.clientes`, `pcc.movimientos`, `pcc.config`, `pcc.theme`). La configuración (`pcc.config`) incluye los **días de aviso**, la **moneda** y los **datos del negocio** del recibo (`nombreNegocio`, `telefonoContacto`, `direccionNegocio`, `mensajePie`), que se añaden con sus valores por defecto a cualquier configuración antigua que no los tuviera.
 
 Esto implica que:
 
@@ -408,10 +352,10 @@ Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp
 ## Qué se probó
 
 - **Pruebas automatizadas del backend:** `node --test` dentro de `server/` cubre login (contraseña incorrecta → 401, correcta → cookie de sesión), que las rutas `/api/*` y el WebSocket exigen sesión, el ida y vuelta `PUT`→`GET` por SQLite (preservando campos ricos del cliente y de pago) y la difusión por WebSocket entre dos clientes.
-- **Pruebas automatizadas de la migración:** `node --test` dentro de `scripts/` cubre el parseo de CSV (comillas y comas embebidas), el parseo de fechas, los mapeos de Estado y Tipo Internet, el mapeo de las 13 columnas del CSV (incluyendo SSID / Pass WiFi / Pass Modem / IP Principal) y las reglas de reconciliación CSV ↔ Firebase.
+- **Pruebas automatizadas de la migración:** `node --test` dentro de `scripts/` cubre el parseo de CSV (comillas y comas embebidas), el parseo de fechas, los mapeos de Estado y Tipo Internet, el mapeo de las 13 columnas del CSV (incluyendo SSID / Pass WiFi / Pass Modem / IP Principal) y la **carga literal** de los valores "sucios" del CSV (por ejemplo una IP con texto extra se preserva tal cual).
 - **Smoke del núcleo frontend:** `node -e "require('./app.js')"` carga el núcleo vía `globalThis.PCC` (41 claves) sin errores; `node --check app.js` y `node --check red-mapa.js` pasan sin errores de sintaxis. `red-mapa.js` **se autoprotege cuando no hay `document`** (la lógica de DOM no se ejecuta fuera del navegador, solo se expone su función pura de clasificación).
 - Carga del núcleo con un `localStorage` simulado: se siembran **18 clientes reales**; `formatoMoneda(500)` devuelve `$500.00` y `formatoFechaLarga("2026-09-29")` devuelve `29 de septiembre de 2026`.
-- **Dataset de los 18 reales:** el SEED tiene **exactamente 18 clientes**, **todos Activos**, con **exactamente un** socio **Octavio** que es **`casa 44 LIZBETH`** (el resto, Carlos); los clientes sin dato de red arrancan con **campos de red vacíos** (sin IP, tipo de conexión ni AP) y `tipoPago` por defecto en **"Directo"**.
+- **Dataset de los 18 reales:** el SEED tiene **exactamente 18 clientes**, **todos Activos**; los clientes sin dato de red arrancan con **campos de red vacíos** (sin IP, tipo de conexión ni AP).
 - **Mapeos concretos de red:** se verifica que los clientes con IP quedan bajo su AP/enlace correcto (por ejemplo *Nieto* `.38`, *Lupita casa 26* `.111` y *TIENDA INDOMABLE* `.129` en AP_OCTARED_3; *Reyes vecino* `.34` y *Jessy casa 43* `.40` en LiteAP AC-1; *Berenice* `.31` en LiteAP AC-2; *Mercedez RH* `.36` en PtP MERCEDES RH; *casa 44 LIZBETH* `.145` en PtP CASA 44).
 - **Clasificación del mapa** (`window.PCC_RED.clasificarClientes`): sobre el SEED de 18 produce **8 identificados** (los que traen IP, repartidos bajo su AP/enlace) y **10 pendientes**; un cliente con IP y `apId` conocido cae como identificado, y uno sin IP o con `apId` desconocido cae en pendientes.
 - **Fusión de antenas fijas y clientes** (`window.PCC_RED.fusionarAntenas`): AP OCTARED3 lista sus **6 antenas fijas** de la topología; sin clientes reales todas son filas de infraestructura; con un cliente real cuya IP coincide con una antena (`.111`) la fila pasa a **identificada** y toma el nombre del cliente **sin duplicar**, y un cliente con IP nueva se agrega como fila extra identificada.
@@ -419,17 +363,12 @@ Esta acción abre el sitio de WhatsApp en una pestaña nueva (necesitas WhatsApp
 - Coherencia del criterio de "vencido": un cliente **Pausado** y atrasado **no** cuenta como vencido en ningún conteo, mientras que uno **Activo** y atrasado sí.
 - Flujo de **Pagar**: tras registrar el pago, la fecha de próximo pago avanza al siguiente ciclo (mes siguiente respetando el día de pago).
 - `crearCliente` normaliza y autocalcula la fecha de próximo pago para un cliente nuevo.
-- **Campo socio**: `crearCliente` asigna **Carlos** por defecto, respeta **Octavio** cuando se indica y normaliza cualquier valor inválido a Carlos; el conjunto de los 18 reales tiene **exactamente un** cliente marcado "Octavio" (**`casa 44 LIZBETH`**) y el resto en Carlos.
-- **Migración de configuración**: una `pcc.config` antigua `{diasAviso, moneda}` migra añadiendo los gastos fijos con sus defaults (`costoAntena: 1305`, `numAntenas: 2`, `costoLuz: 300`, `luzPeriodicidadMeses: 2`, `luzMesAncla: "2025-11"`).
-- **Patrón de la luz** (`luzAplicaEnMes`): aplica en noviembre 2025 y enero 2026, y no aplica en diciembre 2025 ni febrero 2026.
-- **Gastos fijos del mes** (`gastosFijosDelMes`): total **$2,910** en noviembre (Starlink $2,610 + luz $300) y **$2,610** en diciembre (sin luz).
-- **Reparto** (`calcularReparto`): sobre un escenario con pagos de clientes de ambos socios, se verifica que *Ingresos del mes* cuenta solo los pagos `esPago` del mes (ignora los ingresos manuales y los pagos de otros meses), que `gananciaRepartir = ingresos − gastos fijos − pagos de Octavio`, que la mitad de cada socio es correcta y que *Total Carlos* es su mitad mientras que *Total Octavio* es su mitad más sus pagos directos; un pago sin cliente asociado no se atribuye a Octavio.
 - **Revertir pago** (`construirMovimientoPago` / `revertirPago`): al pagar, el movimiento guarda el estado previo del cliente (`prevUltimoPago` y `prevFechaProximoPago`); al revertir, se elimina el movimiento del cobro y se restauran **exactamente** esos valores. Para un pago antiguo **sin** esos datos se verifica el *fallback*: limpia el último pago y recalcula la fecha de próximo pago. Un `id` inexistente o un movimiento que no es un pago no modifican nada.
 - **Folio consecutivo por año** (`generarFolio`): calcula `REC-AAAA-NNNN` tomando el máximo consecutivo del **mismo año** y sumando 1 (el primero del año empieza en `0001`); ignora folios de otros años y pagos sin folio.
 - **Periodo por defecto** (`periodoPorDefecto`): devuelve el `YYYY-MM` del **próximo pago** del cliente y, si no lo tiene, el **mes de referencia**; `construirMovimientoPago` respeta el periodo y el monto indicados y, cuando recibe la lista de movimientos, asigna un folio consecutivo (p. ej. `REC-2026-0008`), dando prioridad a un folio explícito.
 - **Formato de periodo** (`formatoPeriodo`): convierte `YYYY-MM` a texto en español (p. ej. *febrero 2026*) y devuelve `''` ante entradas vacías o inválidas.
 - **Datos del recibo** (`datosRecibo`): arma el recibo con el nombre del negocio por defecto y el monto formateado; para **pagos viejos sin folio/periodo** aplica el *fallback* (folio **"sin folio"** y periodo derivado de la **fecha del pago**).
 - **Texto de WhatsApp del recibo** (`textoWhatsAppRecibo`): el resumen incluye el **folio**, el **monto formateado** y el **nombre del negocio**.
-- **Migración de los datos del negocio**: una `pcc.config` antigua migra añadiendo `nombreNegocio` (**"Mi WISP"**), `telefonoContacto`, `direccionNegocio` y `mensajePie` (**"Gracias por su preferencia."**) con sus valores por defecto.
+- **Migración de los datos del negocio**: una `pcc.config` antigua migra añadiendo `nombreNegocio` (**"OCTARED"**), `telefonoContacto`, `direccionNegocio` y `mensajePie` (**"Gracias por su preferencia."**) con sus valores por defecto.
 - La capa de interfaz se inicializa y ejecuta el render completo sin lanzar errores (verificado con un DOM simulado).
-- Revisión funcional recomendada en el navegador: crear / editar / pausar / eliminar clientes, buscar, filtrar por cada chip, ordenar, exportar CSV, cambiar de mes, abrir cada modal, registrar gastos / ingresos / ahorros, **pagar un cliente y luego pulsar ↩️ Revertir para confirmar que vuelve a su estado anterior** (y que el Resumen y el Reparto se recalculan), **registrar un pago eligiendo periodo y monto, ver / imprimir el recibo y abrir el 📜 Historial** (ver [Verificación manual del Historial de pagos y Recibos](#verificación-manual-del-historial-de-pagos-y-recibos)), alternar el modo oscuro y recargar para confirmar la persistencia; la consola debe quedar sin errores.
+- Revisión funcional recomendada en el navegador: crear / editar / pausar / eliminar clientes, buscar, filtrar por cada chip, ordenar, exportar CSV, cambiar de mes, abrir cada modal, registrar gastos / ingresos / ahorros, **pagar un cliente y luego pulsar ↩️ Revertir para confirmar que vuelve a su estado anterior** (y que el Resumen se recalcula), **registrar un pago eligiendo periodo y monto, ver / imprimir el recibo y abrir el 📜 Historial** (ver [Verificación manual del Historial de pagos y Recibos](#verificación-manual-del-historial-de-pagos-y-recibos)), alternar el modo oscuro y recargar para confirmar la persistencia; la consola debe quedar sin errores.

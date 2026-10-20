@@ -34,15 +34,6 @@
   var CONFIG_DEFAULT = {
     diasAviso: 3, // dias de antelacion para considerar un pago "proximo"
     moneda: "MXN",
-    // Gastos fijos del negocio (reparto de fin de mes entre socios).
-    // Starlink: numAntenas * costoAntena = 2 * 1305 = 2610 fijo todos
-    // los meses. Luz: costoLuz cada luzPeriodicidadMeses meses, empezando
-    // en luzMesAncla (noviembre 2025 es el primer mes que paga luz).
-    costoAntena: 1305,
-    numAntenas: 2,
-    costoLuz: 300,
-    luzPeriodicidadMeses: 2,
-    luzMesAncla: "2025-11",
     // Datos del negocio para los recibos (valores GENERICOS por defecto;
     // el dueno los personaliza desde Configuracion). Se usan al armar el
     // recibo de un pago: encabezado, pie y datos de contacto.
@@ -50,7 +41,7 @@
     //   telefonoContacto: telefono de contacto del negocio (texto libre)
     //   direccionNegocio: domicilio/referencia del negocio
     //   mensajePie:       linea de agradecimiento al pie del recibo
-    nombreNegocio: "Mi WISP",
+    nombreNegocio: "OCTARED",
     telefonoContacto: "",
     direccionNegocio: "",
     mensajePie: "Gracias por su preferencia."
@@ -249,12 +240,7 @@
        monto:            number   cuota mensual (default 500)
        fechaInstalacion: string   ISO 'YYYY-MM-DD'
        diaPago:          number   dia del mes en que vence el pago (1-31)
-       tipoPago:         string   'PTP' | 'Directo'
        estatus:          string   'Activo' | 'Pausado'
-       socio:            string   'Carlos' | 'Octavio' (a quien le paga el
-                                  cliente; default 'Carlos'. Solo Octavio
-                                  cobra directo algun cliente. Los clientes
-                                  v1 sin este campo migran a 'Carlos')
        fechaProximoPago: string   ISO 'YYYY-MM-DD' (vencimiento vigente)
        ultimoPago:       string   ISO 'YYYY-MM-DD' del ultimo pago, o ''
        tipoConexion:     string   'AP' | 'PtP' | 'Modem' | '' (topologia de
@@ -390,9 +376,7 @@
         ? fechaISO(datos.fechaInstalacion)
         : "",
       diaPago: diaPago != null ? Number(diaPago) : 1,
-      tipoPago: datos.tipoPago === "Directo" ? "Directo" : "PTP",
       estatus: datos.estatus === "Pausado" ? "Pausado" : "Activo",
-      socio: datos.socio === "Octavio" ? "Octavio" : "Carlos",
       fechaProximoPago: datos.fechaProximoPago
         ? fechaISO(datos.fechaProximoPago)
         : "",
@@ -591,150 +575,6 @@
       clase: "ok",
       texto: "Vence en " + dias + " días",
       diasVencido: 0
-    };
-  }
-
-  /* ----------------------------------------------------------
-     6.b Reparto de fin de mes entre socios (Carlos / Octavio)
-     ------------------------------------------------------------
-     El negocio es de dos socios: Carlos y Octavio. Al cierre de mes
-     se reparte la ganancia 50/50, pero antes se descuentan los gastos
-     fijos compartidos (Starlink + luz) y se aparta el pago directo de
-     los clientes marcados socio 'Octavio' (ese dinero es 100% suyo).
-
-     Formula (confirmada por el usuario):
-       ingresosMes  = pagos cobrados (esPago) con fecha en el mes
-       pagosOctavio = de esos pagos, los de clientes socio 'Octavio'
-       gastos       = Starlink (2610 fijo) + luz (300 si aplica el mes)
-       gananciaRepartir = ingresosMes - gastos - pagosOctavio
-       mitad        = gananciaRepartir / 2
-       totalCarlos  = mitad
-       totalOctavio = mitad + pagosOctavio
-     ---------------------------------------------------------- */
-
-  /**
-   * luzAplicaEnMes(fecha, cfg): true si el mes de 'fecha' paga luz.
-   * La luz se paga cada 'luzPeriodicidadMeses' meses empezando en
-   * 'luzMesAncla'. Aplica cuando el numero de meses transcurridos desde
-   * el ancla es >= 0 y multiplo de la periodicidad.
-   * Ej.: ancla '2025-11', periodicidad 2 -> nov-2025 true, dic-2025
-   * false, ene-2026 true, feb-2026 false.
-   * @param {Date|string|number} fecha
-   * @param {Object} [cfg]
-   * @returns {boolean}
-   */
-  function luzAplicaEnMes(fecha, cfg) {
-    cfg = cfg || cargarConfig();
-    var d = aFecha(fecha);
-    if (!d) {
-      return false;
-    }
-    var periodo = Number(cfg.luzPeriodicidadMeses);
-    if (!isFinite(periodo) || periodo <= 0) {
-      return false;
-    }
-    var ancla = aFecha(cfg.luzMesAncla + "-01") || aFecha(cfg.luzMesAncla);
-    if (!ancla) {
-      return false;
-    }
-    var offset =
-      (d.getFullYear() - ancla.getFullYear()) * 12 +
-      (d.getMonth() - ancla.getMonth());
-    return offset >= 0 && offset % periodo === 0;
-  }
-
-  /**
-   * gastosFijosDelMes(fecha, cfg): desglose de gastos fijos del mes.
-   * starlink = numAntenas * costoAntena; luz = costoLuz si aplica el mes.
-   * @param {Date|string|number} fecha
-   * @param {Object} [cfg]
-   * @returns {{starlink:number, luz:number, total:number}}
-   */
-  function gastosFijosDelMes(fecha, cfg) {
-    cfg = cfg || cargarConfig();
-    var starlink = Number(cfg.numAntenas) * Number(cfg.costoAntena);
-    if (!isFinite(starlink)) {
-      starlink = 0;
-    }
-    var aplica = luzAplicaEnMes(fecha, cfg);
-    var luz = aplica ? Number(cfg.costoLuz) : 0;
-    if (!isFinite(luz)) {
-      luz = 0;
-    }
-    return { starlink: starlink, luz: luz, total: starlink + luz };
-  }
-
-  /**
-   * calcularReparto(fecha, clientes, movimientos, cfg): calcula el
-   * reparto de fin de mes para el mes de 'fecha'.
-   *
-   * ingresosMes se basa en los PAGOS COBRADOS (movimientos tipo
-   * 'ingreso' con esPago===true) cuya fecha cae en el mismo mes.
-   * Un pago se atribuye a Octavio si su movimiento.clienteId apunta a
-   * un cliente con socio 'Octavio' (si falta clienteId, no cuenta como
-   * de Octavio).
-   *
-   * @param {Date|string|number} fecha
-   * @param {Array<Object>} clientes
-   * @param {Array<Object>} movimientos
-   * @param {Object} [cfg]
-   * @returns {Object}
-   */
-  function calcularReparto(fecha, clientes, movimientos, cfg) {
-    cfg = cfg || cargarConfig();
-    var ref = aFecha(fecha);
-    clientes = Array.isArray(clientes) ? clientes : [];
-    movimientos = Array.isArray(movimientos) ? movimientos : [];
-
-    // Indice de socio por id de cliente.
-    var socioPorId = {};
-    for (var i = 0; i < clientes.length; i++) {
-      var c = clientes[i];
-      if (c && c.id) {
-        socioPorId[c.id] = c.socio === "Octavio" ? "Octavio" : "Carlos";
-      }
-    }
-
-    var ingresosMes = 0;
-    var pagosOctavio = 0;
-    for (var j = 0; j < movimientos.length; j++) {
-      var mov = movimientos[j];
-      if (!mov || mov.tipo !== "ingreso" || !mov.esPago) {
-        continue;
-      }
-      var fMov = aFecha(mov.fecha);
-      if (!fMov || !ref) {
-        continue;
-      }
-      if (
-        fMov.getFullYear() !== ref.getFullYear() ||
-        fMov.getMonth() !== ref.getMonth()
-      ) {
-        continue;
-      }
-      var monto = Number(mov.monto) || 0;
-      ingresosMes += monto;
-      if (mov.clienteId && socioPorId[mov.clienteId] === "Octavio") {
-        pagosOctavio += monto;
-      }
-    }
-
-    var gastos = gastosFijosDelMes(ref, cfg);
-    var gananciaRepartir = ingresosMes - gastos.total - pagosOctavio;
-    var mitad = gananciaRepartir / 2;
-
-    return {
-      ingresosMes: ingresosMes,
-      starlink: gastos.starlink,
-      luz: gastos.luz,
-      gastosFijos: gastos.total,
-      pagosOctavio: pagosOctavio,
-      gananciaRepartir: gananciaRepartir,
-      mitadCarlos: mitad,
-      mitadOctavio: mitad,
-      totalCarlos: mitad,
-      totalOctavio: mitad + pagosOctavio,
-      luzAplica: luzAplicaEnMes(ref, cfg)
     };
   }
 
@@ -945,8 +785,7 @@
       periodoTexto: formatoPeriodo(periodo),
       concepto: mov.concepto || "Pago de " + (cliente.nombre || "cliente"),
       monto: monto,
-      montoTexto: formatoMoneda(monto),
-      socio: cliente.socio || ""
+      montoTexto: formatoMoneda(monto)
     };
   }
 
@@ -960,7 +799,7 @@
     datos = datos || {};
     var negocio = datos.negocio || {};
     var lineas = [];
-    lineas.push("Recibo de pago - " + (negocio.nombre || "Mi WISP"));
+    lineas.push("Recibo de pago - " + (negocio.nombre || "OCTARED"));
     lineas.push("Folio: " + (datos.folio || "sin folio"));
     lineas.push("Cliente: " + (datos.cliente && datos.cliente.nombre ? datos.cliente.nombre : "cliente"));
     if (datos.periodoTexto) {
@@ -1106,21 +945,10 @@
     }
     // Mezclar con los valores por defecto por si faltan claves nuevas.
     // Esto migra configuraciones viejas {diasAviso,moneda} anadiendo las
-    // claves de gastos fijos con sus defaults.
+    // claves de datos del negocio con sus defaults.
     return {
       diasAviso: cfg.diasAviso != null ? cfg.diasAviso : CONFIG_DEFAULT.diasAviso,
       moneda: cfg.moneda != null ? cfg.moneda : CONFIG_DEFAULT.moneda,
-      costoAntena:
-        cfg.costoAntena != null ? cfg.costoAntena : CONFIG_DEFAULT.costoAntena,
-      numAntenas:
-        cfg.numAntenas != null ? cfg.numAntenas : CONFIG_DEFAULT.numAntenas,
-      costoLuz: cfg.costoLuz != null ? cfg.costoLuz : CONFIG_DEFAULT.costoLuz,
-      luzPeriodicidadMeses:
-        cfg.luzPeriodicidadMeses != null
-          ? cfg.luzPeriodicidadMeses
-          : CONFIG_DEFAULT.luzPeriodicidadMeses,
-      luzMesAncla:
-        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla,
       // Datos del negocio para recibos (migran con default si faltan).
       nombreNegocio:
         cfg.nombreNegocio != null
@@ -1145,17 +973,6 @@
       diasAviso:
         cfg.diasAviso != null ? cfg.diasAviso : CONFIG_DEFAULT.diasAviso,
       moneda: cfg.moneda != null ? cfg.moneda : CONFIG_DEFAULT.moneda,
-      costoAntena:
-        cfg.costoAntena != null ? cfg.costoAntena : CONFIG_DEFAULT.costoAntena,
-      numAntenas:
-        cfg.numAntenas != null ? cfg.numAntenas : CONFIG_DEFAULT.numAntenas,
-      costoLuz: cfg.costoLuz != null ? cfg.costoLuz : CONFIG_DEFAULT.costoLuz,
-      luzPeriodicidadMeses:
-        cfg.luzPeriodicidadMeses != null
-          ? cfg.luzPeriodicidadMeses
-          : CONFIG_DEFAULT.luzPeriodicidadMeses,
-      luzMesAncla:
-        cfg.luzMesAncla != null ? cfg.luzMesAncla : CONFIG_DEFAULT.luzMesAncla,
       // Datos del negocio para recibos (migran con default si faltan).
       nombreNegocio:
         cfg.nombreNegocio != null
@@ -1198,12 +1015,7 @@
      diaPago = dia del mes de la fecha de instalacion.
      Todos los clientes quedan 'Activo'. Instalacion $0 en todos.
 
-     Decisiones de negocio (NO inventar datos que alteren el reparto):
-      - tipoPago financiero = 'Directo' para TODOS por defecto. La tabla
-        del usuario no distingue PTP/Directo a nivel financiero; usar
-        'Directo' evita atribuir pagos a reparto de forma arbitraria.
-      - socio = 'Octavio' SOLO para 'casa 44 LIZBETH' (unico que paga
-        directo a Octavio); el resto 'Carlos'.
+     Decisiones de negocio:
       - estatusPago (marca de la fila, NO el estatus Activo/Pausado):
         'enCurso' (Cresencia) y 'pagado' (Yolanda) => al corriente;
         'debe' => vencido. Se usa por NOMBRE/marca, sin indices magicos.
@@ -1214,17 +1026,17 @@
 
      Cada fila es un objeto para legibilidad:
       { nombre, celular, megas, instalacion (ISO), monto, estatusPago,
-        socio?, ip?, tipoConexion?, apId? }
+        ip?, tipoConexion?, apId? }
      ---------------------------------------------------------- */
   var SEED_RAW = [
     { nombre: "Cresencia caraos casa P4", celular: "9842785595", megas: "5 MB", instalacion: "2025-11-02", monto: 0, estatusPago: "enCurso" },
     { nombre: "VECINA YOLANDA CASA 15", celular: "", megas: "10 MB", instalacion: "2026-05-05", monto: 500, estatusPago: "pagado" },
     { nombre: "Hermelinda", celular: "9841311983", megas: "10 MB", instalacion: "2024-07-05", monto: 500, estatusPago: "debe" },
     { nombre: "MICAELA HERNANDEZ CASA 54", celular: "9671949286", megas: "10 MB", instalacion: "2026-02-07", monto: 500, estatusPago: "debe" },
-    // casa 44 LIZBETH: unico cliente de socio 'Octavio'. IP .145 por el enlace
-    // PtP CASA 44. PENDIENTE CONFIRMAR si la .145 corresponde a Lizbeth o a
-    // 'Daniel casa 44'; por nombre del diagrama ('CASA 44') se asigna aqui.
-    { nombre: "casa 44 LIZBETH", celular: "9842704365", megas: "10 MB", instalacion: "2025-11-12", monto: 500, estatusPago: "debe", socio: "Octavio", ip: "192.168.10.145", tipoConexion: "PtP", apId: RED_IDS.PTP_CASA_44 },
+    // casa 44 LIZBETH: IP .145 por el enlace PtP CASA 44. PENDIENTE CONFIRMAR
+    // si la .145 corresponde a Lizbeth o a 'Daniel casa 44'; por nombre del
+    // diagrama ('CASA 44') se asigna aqui.
+    { nombre: "casa 44 LIZBETH", celular: "9842704365", megas: "10 MB", instalacion: "2025-11-12", monto: 500, estatusPago: "debe", ip: "192.168.10.145", tipoConexion: "PtP", apId: RED_IDS.PTP_CASA_44 },
     { nombre: "Daniel casa 44", celular: "9842086116", megas: "10 MB", instalacion: "2025-04-16", monto: 500, estatusPago: "debe" },
     { nombre: "Nieto", celular: "9848062139", megas: "20 MB", instalacion: "2024-07-17", monto: 600, estatusPago: "debe", ip: "192.168.10.38", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
     { nombre: "Lupita casa 26 alado de nieto", celular: "9982047915", megas: "20 MB", instalacion: "2025-03-21", monto: 700, estatusPago: "debe", ip: "192.168.10.111", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
@@ -1260,9 +1072,7 @@
         monto: fila.monto,
         fechaInstalacion: fila.instalacion,
         // diaPago se deriva de la fecha de instalacion en crearCliente.
-        tipoPago: "Directo", // default financiero para todos (ver nota del SEED)
-        estatus: "Activo",   // todos Activos por ahora
-        socio: fila.socio    // undefined -> 'Carlos' por default
+        estatus: "Activo"   // todos Activos por ahora
       });
       // Guardar la marca de pago de la fila para aplicarEscenarios (no se
       // persiste como campo del cliente; se consume y descarta abajo).
@@ -1416,11 +1226,6 @@
     calcularProximoPago: calcularProximoPago,
     diasRestantes: diasRestantes,
     estadoPago: estadoPago,
-
-    // Reparto de fin de mes entre socios
-    luzAplicaEnMes: luzAplicaEnMes,
-    gastosFijosDelMes: gastosFijosDelMes,
-    calcularReparto: calcularReparto,
 
     // Registrar / revertir pagos
     construirMovimientoPago: construirMovimientoPago,
@@ -1612,7 +1417,6 @@
     var cfg = PCC.cargarConfig();
 
     renderResumen(lista, movs);
-    renderReparto(lista, movs, cfg);
     renderEstadisticas(lista, movs);
     renderPagos(lista);
     renderClientes(lista);
@@ -1676,34 +1480,6 @@
     setTexto("#metrica-porcobrar", PCC.formatoMoneda(porCobrar));
   }
 
-  /* ---------------------- Reparto de fin de mes ------------- */
-  function renderReparto(lista, movs, cfg) {
-    var mes = estado.mesSeleccionado;
-    var elMes = $("#reparto-mes");
-    if (elMes) {
-      elMes.textContent = nombreMesAnio(mes);
-    }
-
-    // El nucleo (PCC.calcularReparto) hace todo el calculo de negocio
-    // sobre el primer dia del mes seleccionado. La UI solo formatea.
-    var r = PCC.calcularReparto(inicioDeMes(mes), lista, movs, cfg);
-
-    setTexto("#reparto-ingresos", PCC.formatoMoneda(r.ingresosMes));
-    setTexto("#reparto-starlink", PCC.formatoMoneda(r.starlink));
-    setTexto("#reparto-luz", PCC.formatoMoneda(r.luz));
-    setTexto("#reparto-pagos-octavio", PCC.formatoMoneda(r.pagosOctavio));
-    setTexto("#reparto-ganancia", PCC.formatoMoneda(r.gananciaRepartir));
-    setTexto("#reparto-mitad", PCC.formatoMoneda(r.mitadCarlos));
-    setTexto("#reparto-total-carlos", PCC.formatoMoneda(r.totalCarlos));
-    setTexto("#reparto-total-octavio", PCC.formatoMoneda(r.totalOctavio));
-
-    var nota = $("#reparto-luz-nota");
-    if (nota) {
-      nota.textContent = r.luzAplica ? "Aplica este mes" : "No aplica este mes";
-      nota.classList.toggle("reparto__nota--aplica", !!r.luzAplica);
-    }
-  }
-
   /* ---------------------- Estadisticas ---------------------- */
   function renderEstadisticas(lista, movs) {
     var mes = estado.mesSeleccionado;
@@ -1711,19 +1487,12 @@
     var pausados = 0;
     var corriente = 0;
     var vencidos = 0;
-    var ptp = 0;
-    var directo = 0;
 
     lista.forEach(function (c) {
       if (c.estatus === "Pausado") {
         pausados += 1;
       } else {
         activos += 1;
-      }
-      if (c.tipoPago === "PTP") {
-        ptp += 1;
-      } else if (c.tipoPago === "Directo") {
-        directo += 1;
       }
       // Criterio unico: un Pausado nunca cuenta como vencido (ver esVencido).
       if (esVencido(c)) {
@@ -1758,8 +1527,6 @@
     setTexto("#stat-mes-corriente", String(corriente));
     setTexto("#stat-mes-vencidos", String(vencidos));
     setTexto("#stat-mes-cobrados", String(cobrados));
-    setTexto("#stat-mes-ptp", String(ptp));
-    setTexto("#stat-mes-directo", String(directo));
     setTexto("#stat-mes-ahorro", PCC.formatoMoneda(ahorro));
   }
 
@@ -1823,20 +1590,13 @@
       todos: lista.length,
       activos: 0,
       pausados: 0,
-      vencidos: 0,
-      ptp: 0,
-      directo: 0
+      vencidos: 0
     };
     lista.forEach(function (c) {
       if (c.estatus === "Pausado") {
         conteos.pausados += 1;
       } else {
         conteos.activos += 1;
-      }
-      if (c.tipoPago === "PTP") {
-        conteos.ptp += 1;
-      } else if (c.tipoPago === "Directo") {
-        conteos.directo += 1;
       }
       if (esVencido(c)) {
         conteos.vencidos += 1;
@@ -1846,8 +1606,6 @@
     setTexto("#cuenta-activos", String(conteos.activos));
     setTexto("#cuenta-pausados", String(conteos.pausados));
     setTexto("#cuenta-vencidos", String(conteos.vencidos));
-    setTexto("#cuenta-ptp", String(conteos.ptp));
-    setTexto("#cuenta-directo", String(conteos.directo));
 
     // Aplicar filtro por chip.
     var filtrados = lista.filter(function (c) {
@@ -1858,10 +1616,6 @@
           return c.estatus === "Pausado";
         case "vencidos":
           return esVencido(c);
-        case "ptp":
-          return c.tipoPago === "PTP";
-        case "directo":
-          return c.tipoPago === "Directo";
         default:
           return true;
       }
@@ -1997,13 +1751,6 @@
     $(".tarjeta__fecha", art).textContent = PCC.formatoFechaLarga(
       cliente.fechaProximoPago
     );
-    $(".etiqueta-tipo", art).textContent = cliente.tipoPago || "";
-    var socioEl = $(".etiqueta-socio", art);
-    if (socioEl) {
-      var socio = cliente.socio === "Octavio" ? "Octavio" : "Carlos";
-      socioEl.textContent = "Paga a: " + socio;
-      socioEl.classList.toggle("etiqueta-socio--octavio", socio === "Octavio");
-    }
 
     // Texto del boton pausar/reanudar segun estatus.
     var btnPausar = $(".accion-pausar", art);
@@ -2302,7 +2049,7 @@
 
   /**
    * abrirHistorial(cliente): filtra los pagos del cliente, calcula el estado
-   * de cuenta y pinta una fila por pago (fecha, periodo, monto, socio, folio)
+   * de cuenta y pinta una fila por pago (fecha, periodo, monto, folio)
    * con botones para ver el recibo y revertir cuando aplica.
    */
   function abrirHistorial(cliente) {
@@ -2399,7 +2146,6 @@
         PCC.periodoPorDefecto({ fechaProximoPago: mov.fecha }, mov.fecha)
       );
     }
-    var socio = cliente.socio === "Octavio" ? "Octavio" : "Carlos";
 
     var info = document.createElement("div");
     info.className = "historial__info";
@@ -2419,8 +2165,6 @@
     linea2.className = "historial__linea historial__linea--meta";
     linea2.textContent =
       PCC.formatoFechaLarga(mov.fecha) +
-      " · Paga a: " +
-      socio +
       " · Folio: " +
       (mov.folio ? mov.folio : "sin folio");
 
@@ -2479,8 +2223,8 @@
   /**
    * accionRevertir(cliente): deshace el ultimo pago registrado del cliente.
    * Pide confirmacion, borra el movimiento de pago y restaura al cliente al
-   * estado previo (ultimoPago/fechaProximoPago). El reparto y las metricas
-   * del mes se recalculan solos al re-renderizar.
+   * estado previo (ultimoPago/fechaProximoPago). Las metricas del mes se
+   * recalculan solas al re-renderizar.
    */
   function accionRevertir(cliente) {
     var mov = ultimoPagoDeCliente(cliente.id);
@@ -2609,9 +2353,7 @@
       setValor("#cliente-monto", cliente.monto);
       setValor("#cliente-fecha-instalacion", cliente.fechaInstalacion);
       setValor("#cliente-dia-pago", cliente.diaPago);
-      setValor("#cliente-tipo-pago", cliente.tipoPago);
       setValor("#cliente-estatus", cliente.estatus);
-      setValor("#cliente-socio", cliente.socio === "Octavio" ? "Octavio" : "Carlos");
       // Campos de red (FEAT-003): tipo de conexion y AP/enlace padre.
       setValor("#cliente-tipo-conexion", cliente.tipoConexion || "");
       setValor("#cliente-ap", cliente.apId || "");
@@ -2625,9 +2367,7 @@
         titulo.textContent = "Nuevo Cliente";
       }
       setValor("#cliente-monto", PCC.MONTO_DEFAULT);
-      setValor("#cliente-tipo-pago", "PTP");
       setValor("#cliente-estatus", "Activo");
-      setValor("#cliente-socio", "Carlos");
       setValor("#cliente-tipo-conexion", "");
       setValor("#cliente-ap", "");
     }
@@ -2674,9 +2414,7 @@
       monto: Number(montoRaw),
       fechaInstalacion: valor("#cliente-fecha-instalacion") || "",
       diaPago: diaPago,
-      tipoPago: valor("#cliente-tipo-pago"),
       estatus: valor("#cliente-estatus"),
-      socio: valor("#cliente-socio"),
       // Campos de red (FEAT-003). crearCliente normaliza tipoConexion
       // (valores invalidos -> '') y conserva apId tal cual.
       tipoConexion: valor("#cliente-tipo-conexion"),
@@ -2778,11 +2516,6 @@
     var cfg = PCC.cargarConfig();
     setValor("#config-dias-aviso", cfg.diasAviso);
     setValor("#config-moneda", cfg.moneda);
-    setValor("#config-costo-antena", cfg.costoAntena);
-    setValor("#config-num-antenas", cfg.numAntenas);
-    setValor("#config-costo-luz", cfg.costoLuz);
-    setValor("#config-luz-periodicidad", cfg.luzPeriodicidadMeses);
-    setValor("#config-luz-ancla", cfg.luzMesAncla);
     // Datos del negocio para el recibo (FEAT-003).
     setValor("#config-nombre-negocio", cfg.nombreNegocio);
     setValor("#config-telefono-contacto", cfg.telefonoContacto);
@@ -2800,49 +2533,16 @@
       return;
     }
 
-    // Gastos fijos del negocio (reparto de fin de mes).
-    var costoAntena = Number(valor("#config-costo-antena"));
-    var numAntenas = Number(valor("#config-num-antenas"));
-    var costoLuz = Number(valor("#config-costo-luz"));
-    var luzPeriodicidad = Number(valor("#config-luz-periodicidad"));
-    var luzMesAncla = valor("#config-luz-ancla");
-
-    var errores = [];
-    if (isNaN(costoAntena) || costoAntena < 0) {
-      errores.push("El costo por antena debe ser un número válido.");
-    }
-    if (isNaN(numAntenas) || numAntenas < 0) {
-      errores.push("El número de antenas debe ser un número válido.");
-    }
-    if (isNaN(costoLuz) || costoLuz < 0) {
-      errores.push("El costo de luz debe ser un número válido.");
-    }
-    if (isNaN(luzPeriodicidad) || luzPeriodicidad < 1) {
-      errores.push("La periodicidad de luz debe ser 1 o más meses.");
-    }
-    if (!/^\d{4}-\d{2}$/.test(luzMesAncla || "")) {
-      errores.push("El mes ancla de luz debe tener el formato AAAA-MM.");
-    }
-    if (errores.length) {
-      window.alert(errores.join("\n"));
-      return;
-    }
-
     // Datos del negocio para el recibo (FEAT-003). Validacion minima:
-    // si el nombre del negocio queda vacio, usar el generico 'Mi WISP'.
+    // si el nombre del negocio queda vacio, usar el generico 'OCTARED'.
     var nombreNegocio = (valor("#config-nombre-negocio") || "").trim();
     if (!nombreNegocio) {
-      nombreNegocio = "Mi WISP";
+      nombreNegocio = "OCTARED";
     }
 
     PCC.guardarConfig({
       diasAviso: dias,
       moneda: valor("#config-moneda") || "MXN",
-      costoAntena: costoAntena,
-      numAntenas: numAntenas,
-      costoLuz: costoLuz,
-      luzPeriodicidadMeses: luzPeriodicidad,
-      luzMesAncla: luzMesAncla,
       nombreNegocio: nombreNegocio,
       telefonoContacto: (valor("#config-telefono-contacto") || "").trim(),
       direccionNegocio: (valor("#config-direccion-negocio") || "").trim(),
@@ -2880,7 +2580,7 @@
     // final para NO romper el orden de las columnas existentes.
     var cabeceras = [
       "Nombre", "Celular", "Dirección", "IP", "Megas", "Monto",
-      "Fecha instalación", "Día de pago", "Tipo", "Estatus", "Próximo pago",
+      "Fecha instalación", "Día de pago", "Estatus", "Próximo pago",
       "Tipo de conexión", "AP o enlace"
     ];
     var filas = [cabeceras.map(escaparCSV).join(",")];
@@ -2894,7 +2594,6 @@
         c.monto,
         c.fechaInstalacion ? PCC.formatoFechaCorta(c.fechaInstalacion) : "",
         c.diaPago,
-        c.tipoPago,
         c.estatus,
         c.fechaProximoPago ? PCC.formatoFechaCorta(c.fechaProximoPago) : "",
         c.tipoConexion || "",
