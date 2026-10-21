@@ -1,0 +1,76 @@
+# ============================================================
+# Panel de Control de Clientes - Reverse proxy Caddy (HTTPS autofirmado)
+# ------------------------------------------------------------
+# Acceso SOLO por IP publica (64.177.92.121), sin dominio y sin Let's
+# Encrypt (ACME necesita un nombre DNS verificable). Caddy termina TLS con
+# un certificado AUTOFIRMADO generado explicitamente por openssl (ver
+# scripts/gen-cert.sh), NO con la CA interna de Caddy.
+#
+# POR QUE este enfoque (y por que ya NO usamos la CA interna): un cliente que
+# se conecta por IP no envia SNI (o envia la IP como SNI). La CA interna de
+# Caddy (`tls internal` / `local_certs`) NO lograba completar ese handshake
+# sin SNI por IP publica: abortaba con "TLS alert, internal error (592)"
+# aunque `https://localhost` si funcionaba. Tras varios intentos (sitio
+# nombrado por IP, local_certs, sitio por puerto) el fallo persistia.
+#
+# SOLUCION DEFINITIVA: generar fuera de Caddy un certificado autofirmado que
+# incluya la IP en el subjectAltName (IP:64.177.92.121) y servirlo de forma
+# EXPLICITA con `tls <certfile> <keyfile>`. Con un certificado por defecto
+# explicito en un sitio por PUERTO (:443), Caddy lo presenta SIEMPRE, con o
+# sin SNI, lo que resuelve el caso de acceso por IP publica sin SNI.
+#
+# El navegador avisara UNA vez de que el certificado no es de confianza
+# (es autofirmado); el usuario acepta la advertencia (decision ya tomada en
+# MIGRATION.md). El certificado se genera en el servidor con:
+#   bash scripts/gen-cert.sh   ->  certs/selfsigned.crt + certs/selfsigned.key
+# y docker-compose.yml lo monta en /etc/caddy/certs (solo lectura).
+#
+# Caddy proxya HTTP y WebSocket al backend Node (servicio `app:8080` en
+# la red interna de docker compose). reverse_proxy reenvia de forma nativa
+# el upgrade de WebSocket de /ws, asi que la sync en vivo funciona sobre
+# wss:// sin configuracion extra.
+#
+# El backend NO se publica al host: solo Caddy expone 80/443. El :80
+# redirige a :443 para que http:// caiga en https://.
+# ============================================================
+
+{
+	# Solo desactivamos la redireccion HTTP->HTTPS automatica de Caddy, porque
+	# ya definimos el redir del :80 de forma explicita y no queremos que ambas
+	# compitan. (NO usar auto_https off: eso desactivaria toda la gestion TLS.)
+	auto_https disable_redirects
+}
+
+# Sitio por PUERTO (:443) para atender cualquier conexion entrante, incluida
+# la que llega por la IP publica 64.177.92.121 sin SNI. Al servir un
+# certificado explicito como predeterminado, Caddy lo presenta en cualquier
+# handshake (con o sin SNI), resolviendo el internal_error del acceso por IP.
+:443 {
+	# Certificado autofirmado generado por openssl (scripts/gen-cert.sh) y
+	# montado en el contenedor en /etc/caddy/certs (solo lectura). Su SAN
+	# incluye IP:64.177.92.121, por eso el handshake por IP ahora funciona.
+	tls /etc/caddy/certs/selfsigned.crt /etc/caddy/certs/selfsigned.key
+
+	# Cabeceras de seguridad (ademas de las que ya fija el backend).
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# HSTS desactivado a proposito: con cert autofirmado por IP no aporta
+		# y puede complicar la aceptacion manual del certificado.
+		-Server
+	}
+
+	# Proxy a backend + WebSocket (/ws se reenvia con upgrade automatico).
+	reverse_proxy app:8080
+
+	# Logs al stdout del contenedor (visibles con docker compose logs proxy).
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Redirige http://IP -> https://IP (puerto 80 -> 443).
+:80 {
+	redir https://{host}{uri} permanent
+}

@@ -1,0 +1,16 @@
+{
+  "name": "pcc-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend autohospedado del Panel de Control de Clientes: REST + WebSocket + SQLite embebido + login de contrasena unica. Reemplaza Firestore (datos + sync en vivo) y Firebase Auth (login).",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "dependencies": {}
+}

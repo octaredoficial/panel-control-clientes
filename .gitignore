@@ -3,3 +3,29 @@
 node_modules/
 *.log
 .DS_Store
+
+# Secretos reales del despliegue (usa .env.example como plantilla)
+.env
+.env.*
+!.env.example
+
+# Certificado autofirmado generado en el servidor (scripts/gen-cert.sh).
+# La clave privada NUNCA debe versionarse.
+certs/
+*.key
+*.crt
+
+# Base de datos SQLite local (en produccion vive en el volumen de Docker)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+server/*.sqlite
+server/*.sqlite-shm
+server/*.sqlite-wal
+
+# Archivos de trabajo de la migracion con datos reales de clientes (FEAT-005).
+# Son locales del usuario; nunca se versionan.
+export.json
+clientes-from-csv.json
+dataset-final.json
+*.csv

@@ -1,0 +1,52 @@
+# Contexto de build = raiz del repo (docker build -f server/Dockerfile .).
+# Excluye lo que no debe entrar en la imagen del backend.
+
+# Control de versiones y metadatos
+.git
+.gitignore
+.dockerignore
+
+# Dependencias instaladas (se instalan dentro de la imagen si hiciera falta)
+node_modules
+**/node_modules
+
+# Secretos y datos locales: NUNCA dentro de la imagen
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+server/*.sqlite
+server/*.sqlite-*
+data/
+
+# Logs y temporales
+*.log
+.DS_Store
+
+# Infra que no se sirve ni se ejecuta dentro del contenedor del backend
+docker-compose.yml
+server/Dockerfile
+Caddyfile
+
+# Herramientas y datos de la migracion (se ejecutan en la maquina del
+# usuario, no dentro del contenedor del backend)
+scripts/
+export.json
+clientes-from-csv.json
+dataset-final.json
+*.csv
+
+# Documentacion (no se sirve desde el backend)
+README.md
+MIGRATION.md
+DEPLOY.md
+server/README.md
+
+# Pruebas del backend (no se necesitan en produccion)
+server/*.test.js
+
+# Artefactos de tareas del agente
+.agents
+.kiro
+.tasks

@@ -1,0 +1,80 @@
+# ============================================================
+# Panel de Control de Clientes - Orquestacion con docker compose
+# ------------------------------------------------------------
+# Dos servicios:
+#   - app   : backend Node 22 (SQLite embebido + REST + WebSocket + login
+#             de contrasena unica). NO se publica al host; solo lo alcanza
+#             Caddy por la red interna.
+#   - proxy : Caddy, termina HTTPS con un certificado autofirmado EXPLICITO
+#             (generado con openssl por scripts/gen-cert.sh y montado desde
+#             ./certs) y proxya a `app`. Es el UNICO servicio que publica
+#             puertos (80 y 443).
+#
+# Por que asi (ver MIGRATION.md): acceso solo por IP publica sin dominio,
+# HTTPS autofirmado, DB embebida en un volumen, y SIN host networking para
+# no colisionar con la VPN del MikroTik que ya corre en el Vultr.
+#
+# Despliegue (lo ejecuta el USUARIO en el servidor):
+#   cp .env.example .env   # y edita APP_PASSWORD / SESSION_SECRET
+#   docker compose up -d --build
+# ============================================================
+
+services:
+  app:
+    build:
+      # Contexto = raiz del repo para que el Dockerfile vea los estaticos.
+      context: .
+      dockerfile: server/Dockerfile
+    # Lee APP_PASSWORD / SESSION_SECRET / DB_PATH / PORT de .env.
+    env_file:
+      - .env
+    environment:
+      # Valores por defecto si .env no los define (se pueden sobreescribir).
+      PORT: "8080"
+      DB_PATH: /data/pcc.sqlite
+    volumes:
+      # Persiste el archivo SQLite fuera del contenedor.
+      - pcc-data:/data
+    # NO exponemos el puerto del backend al host: solo Caddy entra por la
+    # red interna 'pcc-net'. (Sin 'ports:' a proposito.)
+    networks:
+      - pcc-net
+    restart: unless-stopped
+    # Limite de memoria modesto para convivir con la VPN en el box de 1 GB.
+    # (Soportado por Compose v2 en modo standalone; si tu version lo ignora,
+    # no rompe el arranque.)
+    mem_limit: 256m
+
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      - app
+    # Unico servicio con puertos publicados. Mapeo explicito host->contenedor
+    # (NO host networking) para no tocar la red del host ni la VPN.
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Config de Caddy (solo lectura).
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificado autofirmado explicito (generado con scripts/gen-cert.sh en
+      # ./certs). Caddy lo lee dentro del contenedor en /etc/caddy/certs, la
+      # ruta referenciada por la directiva `tls` del Caddyfile. Solo lectura.
+      - ./certs:/etc/caddy/certs:ro
+      # Datos de Caddy (estado/config). Se mantienen por compatibilidad; ya no
+      # alojan la CA interna porque servimos un certificado explicito.
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - pcc-net
+    restart: unless-stopped
+    mem_limit: 128m
+
+networks:
+  pcc-net:
+    driver: bridge
+
+volumes:
+  pcc-data:
+  caddy-data:
+  caddy-config:
