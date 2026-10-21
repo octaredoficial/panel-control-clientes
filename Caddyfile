@@ -3,24 +3,27 @@
 # ------------------------------------------------------------
 # Acceso SOLO por IP publica (64.177.92.121), sin dominio y sin Let's
 # Encrypt (ACME necesita un nombre DNS verificable). Caddy termina TLS con
-# un certificado AUTOFIRMADO generado por su CA interna.
+# un certificado AUTOFIRMADO generado explicitamente por openssl (ver
+# scripts/gen-cert.sh), NO con la CA interna de Caddy.
 #
-# CLAVE (por que fallaba el handshake por IP): un cliente que se conecta por
-# IP no envia SNI (o envia la IP como SNI). Con un sitio nombrado por IP
-# (https://64.177.92.121) Caddy no encontraba una politica/certificado TLS
-# por defecto para ese handshake sin SNI y abortaba con "internal_error".
+# POR QUE este enfoque (y por que ya NO usamos la CA interna): un cliente que
+# se conecta por IP no envia SNI (o envia la IP como SNI). La CA interna de
+# Caddy (`tls internal` / `local_certs`) NO lograba completar ese handshake
+# sin SNI por IP publica: abortaba con "TLS alert, internal error (592)"
+# aunque `https://localhost` si funcionaba. Tras varios intentos (sitio
+# nombrado por IP, local_certs, sitio por puerto) el fallo persistia.
 #
-# SOLUCION: combinar el option global `local_certs` con un sitio por PUERTO
-# (:443). `local_certs` fuerza a que la CA interna sea el emisor por defecto
-# de TODO (nunca ACME) y garantiza un certificado interno por defecto que
-# presentar cuando no hay SNI. Un sitio `:443` (solo puerto) no exige
-# coincidencia de host, asi que la conexion por IP sin SNI encaja en el y
-# recibe el cert autofirmado interno. Eso resuelve el internal_error al
-# acceder por 64.177.92.121. Se mantiene `tls internal` en el sitio de forma
-# explicita (redundante con local_certs, pero claro).
+# SOLUCION DEFINITIVA: generar fuera de Caddy un certificado autofirmado que
+# incluya la IP en el subjectAltName (IP:64.177.92.121) y servirlo de forma
+# EXPLICITA con `tls <certfile> <keyfile>`. Con un certificado por defecto
+# explicito en un sitio por PUERTO (:443), Caddy lo presenta SIEMPRE, con o
+# sin SNI, lo que resuelve el caso de acceso por IP publica sin SNI.
 #
-# El navegador avisara UNA vez de que el certificado no es de confianza;
-# el usuario acepta la advertencia (decision ya tomada en MIGRATION.md).
+# El navegador avisara UNA vez de que el certificado no es de confianza
+# (es autofirmado); el usuario acepta la advertencia (decision ya tomada en
+# MIGRATION.md). El certificado se genera en el servidor con:
+#   bash scripts/gen-cert.sh   ->  certs/selfsigned.crt + certs/selfsigned.key
+# y docker-compose.yml lo monta en /etc/caddy/certs (solo lectura).
 #
 # Caddy proxya HTTP y WebSocket al backend Node (servicio `app:8080` en
 # la red interna de docker compose). reverse_proxy reenvia de forma nativa
@@ -32,11 +35,6 @@
 # ============================================================
 
 {
-	# Sin dominio: forzar que TODO use la CA interna (cert autofirmado),
-	# nunca ACME. local_certs hace que el issuer interno sea el predeterminado
-	# y asegura un certificado interno por defecto disponible para presentar
-	# cuando la conexion llega sin SNI (caso tipico al entrar por IP).
-	local_certs
 	# Solo desactivamos la redireccion HTTP->HTTPS automatica de Caddy, porque
 	# ya definimos el redir del :80 de forma explicita y no queremos que ambas
 	# compitan. (NO usar auto_https off: eso desactivaria toda la gestion TLS.)
@@ -44,12 +42,14 @@
 }
 
 # Sitio por PUERTO (:443) para atender cualquier conexion entrante, incluida
-# la que llega por la IP publica 64.177.92.121 sin SNI. Con local_certs,
-# Caddy sirve el cert autofirmado interno como predeterminado, resolviendo el
-# internal_error del handshake que ocurria con un sitio nombrado por IP.
+# la que llega por la IP publica 64.177.92.121 sin SNI. Al servir un
+# certificado explicito como predeterminado, Caddy lo presenta en cualquier
+# handshake (con o sin SNI), resolviendo el internal_error del acceso por IP.
 :443 {
-	# Certificado autofirmado por la CA interna de Caddy (explicito).
-	tls internal
+	# Certificado autofirmado generado por openssl (scripts/gen-cert.sh) y
+	# montado en el contenedor en /etc/caddy/certs (solo lectura). Su SAN
+	# incluye IP:64.177.92.121, por eso el handshake por IP ahora funciona.
+	tls /etc/caddy/certs/selfsigned.crt /etc/caddy/certs/selfsigned.key
 
 	# Cabeceras de seguridad (ademas de las que ya fija el backend).
 	header {

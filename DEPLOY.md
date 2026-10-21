@@ -9,8 +9,10 @@ El stack son dos contenedores:
 
 - **app** — backend Node 22 (SQLite + REST + WebSocket + login de contraseña
   única). No publica puertos: solo lo alcanza Caddy por la red interna.
-- **proxy** — Caddy, termina **HTTPS autofirmado** (`tls internal`) y hace de
-  reverse proxy hacia `app`. Es el único que expone puertos (**80** y **443**).
+- **proxy** — Caddy, termina **HTTPS autofirmado** sirviendo un certificado
+  **explícito** generado con `openssl` (ver `scripts/gen-cert.sh`) que incluye
+  la IP en su `subjectAltName`, y hace de reverse proxy hacia `app`. Es el único
+  que expone puertos (**80** y **443**).
 
 > La arquitectura y las decisiones (por qué WebSocket, SQLite, Caddy, etc.) están
 > en [`MIGRATION.md`](./MIGRATION.md). Este documento es la **operativa**.
@@ -93,7 +95,37 @@ Edita `.env` y pon valores **reales**:
 
 ---
 
-## 4. Construir y levantar el stack
+## 4. Generar el certificado autofirmado (antes de levantar el stack)
+
+Caddy sirve un certificado **autofirmado explícito** que debes generar una vez
+en el servidor. El script lo crea con `openssl` incluyendo la IP pública tanto
+en el `CN` como en el `subjectAltName` (clave para que el handshake por IP
+funcione):
+
+```bash
+bash scripts/gen-cert.sh
+# o, si tiene el bit de ejecución:  ./scripts/gen-cert.sh
+```
+
+Esto crea `certs/selfsigned.crt` y `certs/selfsigned.key` (carpeta `certs/` en
+la raíz del repo), que cubren `IP:64.177.92.121`, `localhost` y `127.0.0.1`.
+
+- Si tu IP pública es distinta, edita la variable `IP` al inicio de
+  `scripts/gen-cert.sh` antes de ejecutarlo.
+- La carpeta `certs/` está en `.gitignore`: la **clave privada nunca se sube**
+  al repo; vive solo en el servidor.
+- El navegador seguirá **avisando una vez** de que el certificado no es de
+  confianza (es autofirmado): es lo esperado, acéptalo (ver paso 6).
+- Para **regenerarlo**, borra los archivos y vuelve a ejecutar el script:
+  `rm -f certs/selfsigned.crt certs/selfsigned.key && bash scripts/gen-cert.sh`.
+
+> El `docker-compose.yml` monta `./certs` dentro del contenedor del proxy en
+> `/etc/caddy/certs` (solo lectura), que es la ruta que referencia la directiva
+> `tls` del `Caddyfile`.
+
+---
+
+## 5. Construir y levantar el stack
 
 ```bash
 docker compose up -d --build
@@ -111,7 +143,7 @@ Debes ver los dos servicios `running`. El `proxy` escuchando en `0.0.0.0:80` y
 
 ---
 
-## 5. Abrir la app y aceptar el certificado autofirmado
+## 6. Abrir la app y aceptar el certificado autofirmado
 
 En tu móvil o PC, abre:
 
@@ -120,8 +152,8 @@ https://64.177.92.121
 ```
 
 - El navegador **avisará una vez** de que el certificado no es de confianza
-  (es **autofirmado** por la CA interna de Caddy: es lo esperado al no tener
-  dominio). Acepta la advertencia:
+  (es **autofirmado**, generado con `openssl` en el paso 4: es lo esperado al
+  no tener dominio). Acepta la advertencia:
   - **Chrome/Edge:** «Configuración avanzada» → «Continuar a 64.177.92.121».
   - **Firefox:** «Avanzado» → «Aceptar el riesgo y continuar».
   - **Safari/iOS:** «Mostrar detalles» → «visitar este sitio web».
@@ -136,7 +168,7 @@ sobre `wss://`, que Caddy proxya de forma nativa).
 
 ---
 
-## 6. Operación diaria
+## 7. Operación diaria
 
 ```bash
 # Ver logs (todo el stack, o un servicio):
@@ -152,6 +184,9 @@ docker compose up -d         # vuelve a levantar
 # Actualizar tras un git pull:
 git pull
 docker compose up -d --build
+# Si solo cambiaste el Caddyfile o regeneraste el certificado, basta recrear
+# el proxy:
+docker compose up -d --force-recreate --no-deps proxy
 ```
 
 Los contenedores tienen `restart: unless-stopped`, así que **vuelven a arrancar
@@ -171,7 +206,7 @@ al volumen y reiniciar `app`.
 
 ---
 
-## 7. Verificar que la VPN del MikroTik sigue intacta
+## 8. Verificar que la VPN del MikroTik sigue intacta
 
 Tras levantar el stack, repite las comprobaciones del paso 0:
 
@@ -185,18 +220,24 @@ Si todo responde igual que antes, la migración **no interrumpió** la VPN.
 
 ---
 
-## 8. Resolución de problemas
+## 9. Resolución de problemas
 
 - **`docker compose up` falla al construir:** confirma que corres el comando en
   la **raíz del repo** (donde está `docker-compose.yml`) y que existe `.env`.
+- **El proxy no arranca / error de TLS por cert ausente:** asegúrate de haber
+  ejecutado `bash scripts/gen-cert.sh` (paso 4), que existan
+  `certs/selfsigned.crt` y `certs/selfsigned.key`, y recrea el proxy con
+  `docker compose up -d --force-recreate --no-deps proxy`. Verifica desde el
+  propio servidor: `curl -k -I https://64.177.92.121` (debe responder `HTTP/2
+  200` o `302`).
 - **El navegador no abre `https://64.177.92.121`:** revisa el firewall de Vultr
   (panel web) para permitir **TCP 80 y 443** entrantes, y que `docker compose ps`
   muestre el `proxy` en `running`.
 - **«Contraseña incorrecta»:** el valor es el `APP_PASSWORD` de tu `.env`; tras
   cambiarlo, `docker compose up -d` para recargar la env del contenedor.
 - **Advertencia de certificado en cada visita:** es normal con cert autofirmado;
-  puedes importar la CA interna de Caddy en tu dispositivo si quieres evitarla
-  (opcional), pero no es necesario.
+  puedes importar `certs/selfsigned.crt` como certificado de confianza en tu
+  dispositivo si quieres evitarla (opcional), pero no es necesario.
 - **Poca RAM:** el stack trae límites modestos (`app` 256 MB, `proxy` 128 MB). Si
   `docker compose` de tu versión ignora `mem_limit`, no pasa nada; el consumo
   real es bajo para 30–50 clientes.

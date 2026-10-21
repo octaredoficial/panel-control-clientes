@@ -10,7 +10,7 @@ Todo corre en **tu servidor** (no hay dependencias de servicios externos como Fi
 
 - **Frontend (estático):** `index.html`, `app.js`, `red-mapa.js`, `styles.css` y el módulo de sincronización `backend-sync.js`. Es la misma app vanilla de siempre; toda la lógica de negocio vive en `app.js`.
 - **`app` (backend):** servidor **Node.js 22** con dependencias cero, que embebe **SQLite** (archivo único en un volumen de Docker), expone una **API REST + WebSocket** para los cuatro dominios de datos (`clientes`, `movimientos`, `config`, `theme`), hace de **login con contraseña única** y **sirve los archivos estáticos** del frontend. Ver [`server/README.md`](./server/README.md) para el contrato de la API.
-- **`proxy` (Caddy):** termina **HTTPS autofirmado** (`tls internal`, sin dominio) y hace de reverse proxy hacia `app`. Es el único que publica puertos (80 y 443); redirige `http://` a `https://`.
+- **`proxy` (Caddy):** termina **HTTPS autofirmado** sirviendo un certificado **explícito** generado con `openssl` (`scripts/gen-cert.sh`, con la IP en el `subjectAltName`), sin dominio, y hace de reverse proxy hacia `app`. Es el único que publica puertos (80 y 443); redirige `http://` a `https://`.
 
 ```
 Navegador (móvil/PC)

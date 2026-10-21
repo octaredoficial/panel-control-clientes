@@ -9,6 +9,12 @@ node_modules/
 .env.*
 !.env.example
 
+# Certificado autofirmado generado en el servidor (scripts/gen-cert.sh).
+# La clave privada NUNCA debe versionarse.
+certs/
+*.key
+*.crt
+
 # Base de datos SQLite local (en produccion vive en el volumen de Docker)
 *.sqlite
 *.sqlite-shm

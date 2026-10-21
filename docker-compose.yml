@@ -5,8 +5,10 @@
 #   - app   : backend Node 22 (SQLite embebido + REST + WebSocket + login
 #             de contrasena unica). NO se publica al host; solo lo alcanza
 #             Caddy por la red interna.
-#   - proxy : Caddy, termina HTTPS autofirmado (tls internal) y proxya a
-#             `app`. Es el UNICO servicio que publica puertos (80 y 443).
+#   - proxy : Caddy, termina HTTPS con un certificado autofirmado EXPLICITO
+#             (generado con openssl por scripts/gen-cert.sh y montado desde
+#             ./certs) y proxya a `app`. Es el UNICO servicio que publica
+#             puertos (80 y 443).
 #
 # Por que asi (ver MIGRATION.md): acceso solo por IP publica sin dominio,
 # HTTPS autofirmado, DB embebida en un volumen, y SIN host networking para
@@ -55,8 +57,12 @@ services:
     volumes:
       # Config de Caddy (solo lectura).
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Datos de Caddy: incluye la CA interna y el cert autofirmado, de modo
-      # que el certificado persiste entre reinicios (no se regenera cada vez).
+      # Certificado autofirmado explicito (generado con scripts/gen-cert.sh en
+      # ./certs). Caddy lo lee dentro del contenedor en /etc/caddy/certs, la
+      # ruta referenciada por la directiva `tls` del Caddyfile. Solo lectura.
+      - ./certs:/etc/caddy/certs:ro
+      # Datos de Caddy (estado/config). Se mantienen por compatibilidad; ya no
+      # alojan la CA interna porque servimos un certificado explicito.
       - caddy-data:/data
       - caddy-config:/config
     networks:

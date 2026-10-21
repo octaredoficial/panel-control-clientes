@@ -77,12 +77,17 @@ Justificación (breve):
   HTTP aparte para las escrituras. WS mantiene **una única conexión** bidireccional, más simple y
   eficiente para 1 vCPU / 1 GB de RAM.
 
-### 2.3 Acceso solo por IP + HTTPS autofirmado vía **Caddy (`tls internal`)**
+### 2.3 Acceso solo por IP + HTTPS autofirmado vía **Caddy (certificado explícito)**
 - Acceso **solo por IP pública** `64.177.92.121`, **sin dominio**.
 - **Let's Encrypt es imposible sin dominio** (ACME requiere un nombre DNS verificable), así que se
-  usa **HTTPS autofirmado**. Caddy lo resuelve en una línea con **`tls internal`** (CA interna que
-  genera el certificado); el usuario **acepta la advertencia** del navegador. Caddy actúa como
-  **reverse proxy** delante del backend Node (termina TLS y proxya HTTP/WS al backend).
+  usa **HTTPS autofirmado**. Inicialmente se probó la **CA interna** de Caddy (`tls internal` /
+  `local_certs`), pero **no completaba el handshake por IP pública sin SNI** (alerta `internal
+  error`, 592), aunque `https://localhost` sí funcionaba. La solución definitiva es generar un
+  certificado autofirmado **explícito** con `openssl` cuyo `subjectAltName` incluye la IP
+  (`scripts/gen-cert.sh`) y servirlo con **`tls <cert> <key>`** en un sitio por puerto `:443`; así
+  Caddy lo presenta en cualquier handshake (con o sin SNI). El usuario **acepta la advertencia** del
+  navegador. Caddy actúa como **reverse proxy** delante del backend Node (termina TLS y proxya
+  HTTP/WS al backend).
 
 ### 2.4 Base de datos embebida: **SQLite** (archivo único)
 - **SQLite** de **un solo archivo**, embebido en el servidor (no Firebase).
@@ -171,8 +176,9 @@ El stack son dos servicios en `docker-compose.yml` (raíz del repo):
 - **app** — backend Node 22 (`server/Dockerfile`, imagen `node:22-alpine`,
   usuario no-root). SQLite en el volumen `pcc-data` montado en `/data`. **No
   publica puertos**: solo lo alcanza Caddy por la red interna `pcc-net`.
-- **proxy** — Caddy (`caddy:2-alpine`) con `tls internal` (HTTPS autofirmado,
-  sin dominio ni Let's Encrypt). **Único** servicio que publica puertos (**80**
+- **proxy** — Caddy (`caddy:2-alpine`) con un certificado autofirmado explícito
+  (`tls <cert> <key>`, generado con `scripts/gen-cert.sh`; HTTPS sin dominio ni
+  Let's Encrypt). **Único** servicio que publica puertos (**80**
   y **443**); el `:80` redirige a `:443`. **Sin `network_mode: host`** para no
   colisionar con la VPN del MikroTik.
 
