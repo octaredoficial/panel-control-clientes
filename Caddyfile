@@ -1,9 +1,17 @@
 # ============================================================
 # Panel de Control de Clientes - Reverse proxy Caddy (HTTPS autofirmado)
 # ------------------------------------------------------------
-# Caddy termina TLS en :443 con un certificado AUTOFIRMADO generado por
-# su CA interna (`tls internal`), sin dominio y sin Let's Encrypt (ACME
-# necesita un nombre DNS verificable, imposible accediendo solo por IP).
+# Caddy termina TLS con un certificado AUTOFIRMADO generado por su CA
+# interna (`tls internal`), sin dominio y sin Let's Encrypt (ACME necesita
+# un nombre DNS verificable, imposible accediendo solo por IP).
+#
+# CLAVE: el sitio se direcciona por la IP publica (https://64.177.92.121)
+# en lugar de por puerto (:443). `tls internal` NO emite automaticamente un
+# certificado interno para una IP publica cuando el sitio es solo por puerto;
+# al nombrar la IP en la direccion del sitio, Caddy la incluye en el SAN del
+# cert autofirmado y el handshake TLS deja de abortarse. Se incluye tambien
+# https://localhost para que las pruebas internas (curl -k -I https://localhost)
+# sigan funcionando sobre el mismo bloque.
 #
 # El navegador avisara UNA vez de que el certificado no es de confianza;
 # el usuario acepta la advertencia (decision ya tomada en MIGRATION.md).
@@ -19,16 +27,18 @@
 
 {
 	# No hay dominio: el acceso es solo por IP, asi que no se usa ACME ni
-	# certificados publicos. Mantenemos el cert autofirmado interno (tls
-	# internal en el bloque :443) y solo desactivamos la redireccion HTTP->
-	# HTTPS automatica de Caddy, porque ya definimos el redir del :80 de forma
-	# explicita y no queremos que ambas compitan.
+	# certificados publicos. El cert autofirmado interno se define por sitio
+	# (tls internal) y solo desactivamos la redireccion HTTP->HTTPS automatica
+	# de Caddy, porque ya definimos el redir del :80 de forma explicita y no
+	# queremos que ambas compitan.
 	auto_https disable_redirects
 }
 
-# Escucha por IP, sin nombre de dominio: el bloque :443 atiende cualquier host.
-:443 {
-	# Certificado autofirmado por la CA interna de Caddy (una linea).
+# Sitio HTTPS direccionado por la IP publica (sin dominio) y por localhost.
+# Nombrar la IP aqui es lo que hace que `tls internal` emita un cert
+# autofirmado cuyo SAN cubre 64.177.92.121.
+https://64.177.92.121, https://localhost {
+	# Certificado autofirmado por la CA interna de Caddy (cubre la IP del sitio).
 	tls internal
 
 	# Cabeceras de seguridad (ademas de las que ya fija el backend).
