@@ -1,17 +1,23 @@
 # ============================================================
 # Panel de Control de Clientes - Reverse proxy Caddy (HTTPS autofirmado)
 # ------------------------------------------------------------
-# Caddy termina TLS con un certificado AUTOFIRMADO generado por su CA
-# interna (`tls internal`), sin dominio y sin Let's Encrypt (ACME necesita
-# un nombre DNS verificable, imposible accediendo solo por IP).
+# Acceso SOLO por IP publica (64.177.92.121), sin dominio y sin Let's
+# Encrypt (ACME necesita un nombre DNS verificable). Caddy termina TLS con
+# un certificado AUTOFIRMADO generado por su CA interna.
 #
-# CLAVE: el sitio se direcciona por la IP publica (https://64.177.92.121)
-# en lugar de por puerto (:443). `tls internal` NO emite automaticamente un
-# certificado interno para una IP publica cuando el sitio es solo por puerto;
-# al nombrar la IP en la direccion del sitio, Caddy la incluye en el SAN del
-# cert autofirmado y el handshake TLS deja de abortarse. Se incluye tambien
-# https://localhost para que las pruebas internas (curl -k -I https://localhost)
-# sigan funcionando sobre el mismo bloque.
+# CLAVE (por que fallaba el handshake por IP): un cliente que se conecta por
+# IP no envia SNI (o envia la IP como SNI). Con un sitio nombrado por IP
+# (https://64.177.92.121) Caddy no encontraba una politica/certificado TLS
+# por defecto para ese handshake sin SNI y abortaba con "internal_error".
+#
+# SOLUCION: combinar el option global `local_certs` con un sitio por PUERTO
+# (:443). `local_certs` fuerza a que la CA interna sea el emisor por defecto
+# de TODO (nunca ACME) y garantiza un certificado interno por defecto que
+# presentar cuando no hay SNI. Un sitio `:443` (solo puerto) no exige
+# coincidencia de host, asi que la conexion por IP sin SNI encaja en el y
+# recibe el cert autofirmado interno. Eso resuelve el internal_error al
+# acceder por 64.177.92.121. Se mantiene `tls internal` en el sitio de forma
+# explicita (redundante con local_certs, pero claro).
 #
 # El navegador avisara UNA vez de que el certificado no es de confianza;
 # el usuario acepta la advertencia (decision ya tomada en MIGRATION.md).
@@ -26,19 +32,23 @@
 # ============================================================
 
 {
-	# No hay dominio: el acceso es solo por IP, asi que no se usa ACME ni
-	# certificados publicos. El cert autofirmado interno se define por sitio
-	# (tls internal) y solo desactivamos la redireccion HTTP->HTTPS automatica
-	# de Caddy, porque ya definimos el redir del :80 de forma explicita y no
-	# queremos que ambas compitan.
+	# Sin dominio: forzar que TODO use la CA interna (cert autofirmado),
+	# nunca ACME. local_certs hace que el issuer interno sea el predeterminado
+	# y asegura un certificado interno por defecto disponible para presentar
+	# cuando la conexion llega sin SNI (caso tipico al entrar por IP).
+	local_certs
+	# Solo desactivamos la redireccion HTTP->HTTPS automatica de Caddy, porque
+	# ya definimos el redir del :80 de forma explicita y no queremos que ambas
+	# compitan. (NO usar auto_https off: eso desactivaria toda la gestion TLS.)
 	auto_https disable_redirects
 }
 
-# Sitio HTTPS direccionado por la IP publica (sin dominio) y por localhost.
-# Nombrar la IP aqui es lo que hace que `tls internal` emita un cert
-# autofirmado cuyo SAN cubre 64.177.92.121.
-https://64.177.92.121, https://localhost {
-	# Certificado autofirmado por la CA interna de Caddy (cubre la IP del sitio).
+# Sitio por PUERTO (:443) para atender cualquier conexion entrante, incluida
+# la que llega por la IP publica 64.177.92.121 sin SNI. Con local_certs,
+# Caddy sirve el cert autofirmado interno como predeterminado, resolviendo el
+# internal_error del handshake que ocurria con un sitio nombrado por IP.
+:443 {
+	# Certificado autofirmado por la CA interna de Caddy (explicito).
 	tls internal
 
 	# Cabeceras de seguridad (ademas de las que ya fija el backend).
