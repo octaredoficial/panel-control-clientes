@@ -18,9 +18,12 @@
 # ============================================================
 
 {
-	# Sin email de ACME (no hay dominio); CA interna para el cert autofirmado.
-	# auto_https off evita cualquier intento de emitir cert publico por ACME.
-	auto_https off
+	# No hay dominio: el acceso es solo por IP, asi que no se usa ACME ni
+	# certificados publicos. Mantenemos el cert autofirmado interno (tls
+	# internal en el bloque :443) y solo desactivamos la redireccion HTTP->
+	# HTTPS automatica de Caddy, porque ya definimos el redir del :80 de forma
+	# explicita y no queremos que ambas compitan.
+	auto_https disable_redirects
 }
 
 # Escucha por IP, sin nombre de dominio: el bloque :443 atiende cualquier host.
