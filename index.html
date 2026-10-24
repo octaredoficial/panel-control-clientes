@@ -65,6 +65,10 @@
           <span class="btn__icono" aria-hidden="true">🗺️</span>
           <span>Red</span>
         </button>
+        <button type="button" id="btn-historial" class="btn btn--secundario" aria-pressed="false" title="Ver el historial de meses" aria-label="Ver el historial de meses">
+          <span class="btn__icono" aria-hidden="true">📊</span>
+          <span>Historial</span>
+        </button>
         <button type="button" id="btn-tema" class="btn btn--icono" title="Cambiar modo claro / oscuro" aria-label="Cambiar modo claro / oscuro">
           <span id="btn-tema-icono" aria-hidden="true">🌙</span>
         </button>
@@ -107,6 +111,33 @@
 
         <!-- red-mapa.js inyecta aqui el <svg> de conectores y los nodos. -->
         <div class="red-lienzo" id="red-lienzo" role="group" aria-label="Diagrama de la red"></div>
+      </section>
+
+      <!-- ================= HISTORIAL DE MESES (opt-in, oculto por defecto) =================
+        Vista alterna "Historial de meses" (FEAT-002). El boton #btn-historial
+        del header alterna entre la vista de paneles (resto de .panel de
+        .contenido) y esta seccion. historial.js arma la tabla por mes dentro
+        de #historial-tabla y la grafica de barras (SVG inline) dentro de
+        #historial-grafica, a partir de window.PCC.construirHistorial(...). El
+        boton #btn-mes-historico abre #modal-mes-historico para capturar meses
+        viejos manualmente (persistidos en config.historialManual).
+      -->
+      <section class="panel panel--historial" id="vista-historial" aria-labelledby="historial-titulo" hidden>
+        <div class="panel__cabecera">
+          <h2 class="panel__titulo" id="historial-titulo">Historial de meses
+            <span class="panel__nota" title="Se arma automaticamente desde los pagos registrados; los meses sin pagos salen en $0 y se iran llenando con el uso.">armado desde los pagos registrados · meses sin pagos salen en $0</span>
+          </h2>
+          <button type="button" id="btn-mes-historico" class="btn btn--secundario">
+            <span class="btn__icono" aria-hidden="true">➕</span>
+            <span>Agregar mes histórico</span>
+          </button>
+        </div>
+
+        <!-- historial.js inyecta aqui la grafica de barras (SVG inline). -->
+        <div class="historial-grafica" id="historial-grafica" role="img" aria-label="Gráfica de lo cobrado por mes"></div>
+
+        <!-- historial.js inyecta aqui la tabla por mes. -->
+        <div class="historial-tabla-contenedor" id="historial-tabla"></div>
       </section>
 
       <!-- ================= RESUMEN DEL MES ================= -->
@@ -845,10 +876,69 @@
     </div>
   </div>
 
+  <!-- ----- Modal Agregar mes historico (FEAT-002) ----- -->
+  <div class="modal" id="modal-mes-historico" hidden>
+    <div class="modal__overlay" data-cerrar-modal></div>
+    <div class="modal__dialogo" role="dialog" aria-modal="true" aria-labelledby="modal-mes-historico-titulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="modal-mes-historico-titulo">Agregar mes histórico</h2>
+        <button type="button" class="btn btn--icono" data-cerrar-modal aria-label="Cerrar">✕</button>
+      </div>
+      <form class="modal__cuerpo" id="form-mes-historico">
+        <p class="campo-ayuda">
+          Captura los totales de un mes viejo (p.ej. de tu Excel). Si luego se
+          registran pagos reales de ese mes, los datos reales tienen prioridad.
+        </p>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="mes-historico-mes">Mes</label>
+            <input type="month" id="mes-historico-mes" name="mes" class="campo" required />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="mes-historico-cobrado">Cobrado</label>
+            <input type="number" id="mes-historico-cobrado" name="cobrado" class="campo" min="0" step="1" required />
+          </div>
+        </div>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="mes-historico-gastos">Gastos (opcional)</label>
+            <input type="number" id="mes-historico-gastos" name="gastos" class="campo" min="0" step="1" placeholder="Se calcula si lo dejas vacío" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="mes-historico-nota">Nota (opcional)</label>
+            <input type="text" id="mes-historico-nota" name="nota" class="campo" placeholder="p.ej. totales del Excel" />
+          </div>
+        </div>
+
+        <div class="campo-fila">
+          <div class="campo-grupo">
+            <label class="campo-label" for="mes-historico-carlos">Total Carlos (opcional)</label>
+            <input type="number" id="mes-historico-carlos" name="totalCarlos" class="campo" min="0" step="1" placeholder="Mitad si lo dejas vacío" />
+          </div>
+          <div class="campo-grupo">
+            <label class="campo-label" for="mes-historico-octavio">Total Octavio (opcional)</label>
+            <input type="number" id="mes-historico-octavio" name="totalOctavio" class="campo" min="0" step="1" placeholder="Mitad si lo dejas vacío" />
+          </div>
+        </div>
+
+        <div class="modal__acciones">
+          <button type="button" class="btn btn--secundario" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn--primario">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="app.js" defer></script>
   <!-- Vista "Mapa de red" (FEAT-003). Lee window.PCC de forma perezosa, por
        lo que debe cargarse despues de app.js (defer preserva el orden). -->
   <script src="red-mapa.js" defer></script>
+  <!-- Vista "Historial de meses" (FEAT-002). Lee window.PCC de forma perezosa;
+       se carga despues de red-mapa.js y antes de firebase-sync.js (defer
+       preserva el orden). Se autoprotege si no hay document (arnes/node). -->
+  <script src="historial.js" defer></script>
   <!-- Modulo de sincronizacion con Firebase (Auth + Firestore). Solo se
        ejecuta en el navegador; se carga desde el CDN gstatic. -->
   <script type="module" src="firebase-sync.js"></script>

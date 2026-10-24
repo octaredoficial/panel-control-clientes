@@ -1670,6 +1670,150 @@ body {
   opacity: 0.3;
 }
 
+/* ====================================================================
+   HISTORIAL DE MESES (vista opt-in, FEAT-002)
+   Tabla por mes + grafica de barras SVG inline. Usa las variables de
+   tema (:root / [data-theme='oscuro']) para adaptarse a claro/oscuro.
+   Responsive: tabla y grafica hacen scroll-x en pantallas chicas.
+   ==================================================================== */
+
+/* ---------------------- Grafica (SVG) --------------------- */
+.historial-grafica {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 0 4px;
+  margin-bottom: 18px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.historial-svg {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
+.historial-eje {
+  stroke: var(--borde-fuerte);
+  stroke-width: 1;
+}
+
+.historial-barra {
+  fill: var(--acento);
+  transition: fill 0.2s ease;
+}
+
+.historial-barra--manual {
+  fill: var(--ambar);
+}
+
+.historial-barra-g:hover .historial-barra {
+  fill: var(--acento-fuerte);
+}
+
+.historial-barra-monto {
+  fill: var(--texto-suave);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.historial-barra-rotulo {
+  fill: var(--texto-suave);
+  font-size: 12px;
+}
+
+/* ---------------------- Tabla por mes --------------------- */
+.historial-tabla-contenedor {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-sm);
+}
+
+table.historial-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+  font-size: 0.88rem;
+}
+
+table.historial-tabla th,
+table.historial-tabla td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--borde);
+  white-space: nowrap;
+}
+
+table.historial-tabla thead th {
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  position: sticky;
+  top: 0;
+}
+
+table.historial-tabla tbody tr:nth-child(even) {
+  background: var(--superficie-2);
+}
+
+table.historial-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.historial-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.historial-celda-mes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.historial-fila--manual {
+  background: var(--acento-suave) !important;
+}
+
+.historial-badge-manual {
+  font-size: 0.68rem;
+}
+
+.historial-accion {
+  text-align: right;
+}
+
+.historial-eliminar {
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--rojo);
+  border-radius: var(--radio-chip);
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.historial-eliminar:hover {
+  background: var(--rojo-suave);
+  border-color: transparent;
+}
+
+.historial-vacio {
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  font-style: italic;
+  padding: 16px;
+  text-align: center;
+}
+
 /* ---------------------- Responsive ------------------------ */
 @media (max-width: 860px) {
   .metricas {

@@ -630,7 +630,9 @@
     }
     return Array.prototype.slice.call(cont.querySelectorAll(":scope > .panel"))
       .filter(function (p) {
-        return p.id !== "vista-red";
+        // Excluir AMBAS vistas opt-in: asi al alternar el Mapa de red no se
+        // muestra la vista Historial como panel suelto (y viceversa).
+        return p.id !== "vista-red" && p.id !== "vista-historial";
       });
   }
 
@@ -639,12 +641,30 @@
     return !!(vista && !vista.hidden);
   }
 
+  // Al abrir el Mapa de red, cerrar la otra vista opt-in (Historial) si
+  // estuviera visible y resetear su boton, para que nunca queden las dos.
+  function cerrarVistaHistorial() {
+    var vista = $("#vista-historial");
+    if (vista && !vista.hidden) {
+      vista.hidden = true;
+    }
+    var btn = $("#btn-historial");
+    if (btn) {
+      btn.classList.remove("btn--primario");
+      btn.classList.add("btn--secundario");
+      btn.setAttribute("aria-pressed", "false");
+    }
+  }
+
   function alternarVistaRed() {
     var vista = $("#vista-red");
     if (!vista) {
       return;
     }
     var mostrar = vista.hidden;
+    if (mostrar) {
+      cerrarVistaHistorial();
+    }
     vista.hidden = !mostrar;
     panelesPrincipales().forEach(function (p) {
       p.hidden = mostrar;
