@@ -682,6 +682,88 @@
     return total;
   }
 
+  /* ----------------------------------------------------------
+     6.a.bis Cobranza por MES CALENDARIO (regla principal de estado)
+     ------------------------------------------------------------
+     Regla confirmada por el usuario (OPCION A): el cobro es por mes
+     natural. Un cliente esta "atrasado" si NO ha registrado un pago del
+     MES EN CURSO, sin importar su fecha de vencimiento rodante individual.
+
+     - pagoDelMes(cliente, movimientos, fechaRef): true si existe un
+       movimiento de pago (esPago) de ese cliente cuyo 'periodo' sea el mes
+       de fechaRef (YYYY-MM). Para pagos viejos sin 'periodo', se usa el mes
+       de su 'fecha'. Es puro y no muta nada.
+     - estaAtrasado(cliente, movimientos, fechaRef): true si el cliente es
+       Activo y NO pago el mes de fechaRef. Un Pausado NUNCA esta atrasado
+       (no se le cobra mientras esta en pausa), igual que antes.
+
+     "Mes en curso" = el mes de HOY. Como la regla mira el periodo del mes
+     actual, al cambiar de mes natural TODOS vuelven a faltar por pagar de
+     forma automatica (no hay pago con el periodo del nuevo mes). No hace
+     falta ningun cron ni reinicio manual: la ausencia del pago del nuevo mes
+     los marca atrasados por si sola.
+     ---------------------------------------------------------- */
+
+  /**
+   * mesDe(fecha) -> 'YYYY-MM' del mes de 'fecha' (o '' si no es valida).
+   * @param {Date|string|number} fecha
+   * @returns {string}
+   */
+  function mesDe(fecha) {
+    var d = aFecha(fecha);
+    if (!d) {
+      return "";
+    }
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+
+  /**
+   * pagoDelMes(cliente, movimientos, fechaRef): true si el cliente registro
+   * un pago (movimiento esPago) que cubre el mes de 'fechaRef'. Se compara
+   * por 'periodo' (YYYY-MM) cuando el movimiento lo trae; para pagos viejos
+   * sin 'periodo' se cae al mes de su 'fecha'. No muta nada.
+   * @param {Object} cliente
+   * @param {Array<Object>} movimientos
+   * @param {Date|string|number} [fechaRef] default: hoy
+   * @returns {boolean}
+   */
+  function pagoDelMes(cliente, movimientos, fechaRef) {
+    if (!cliente || !cliente.id) {
+      return false;
+    }
+    movimientos = Array.isArray(movimientos) ? movimientos : [];
+    var mesObjetivo = mesDe(fechaRef || new Date());
+    if (!mesObjetivo) {
+      return false;
+    }
+    for (var i = 0; i < movimientos.length; i++) {
+      var mov = movimientos[i];
+      if (!mov || !mov.esPago || mov.clienteId !== cliente.id) {
+        continue;
+      }
+      var mesMov = mov.periodo ? String(mov.periodo) : mesDe(mov.fecha);
+      if (mesMov === mesObjetivo) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * estaAtrasado(cliente, movimientos, fechaRef): true si el cliente es
+   * Activo y NO pago el mes de 'fechaRef'. Un Pausado nunca esta atrasado.
+   * @param {Object} cliente
+   * @param {Array<Object>} movimientos
+   * @param {Date|string|number} [fechaRef] default: hoy
+   * @returns {boolean}
+   */
+  function estaAtrasado(cliente, movimientos, fechaRef) {
+    if (!cliente || cliente.estatus !== "Activo") {
+      return false;
+    }
+    return !pagoDelMes(cliente, movimientos, fechaRef);
+  }
+
   /**
    * calcularReparto(fecha, clientes, movimientos, cfg): calcula el
    * reparto de fin de mes para el mes de 'fecha'.
@@ -1300,34 +1382,36 @@
   }
 
   /**
-   * aplicarEscenarios: fija fechaProximoPago/ultimoPago para que el dataset
-   * refleje la interpretacion de pago confirmada por el usuario, usando la
-   * marca '_estatusPago' de cada cliente (no indices magicos):
-   *  - 'debe'    => vencido: fechaProximoPago en el pasado, sin ultimoPago.
-   *  - 'pagado'  => al corriente: ultimoPago reciente, proximo pago futuro.
-   *  - 'enCurso' => recien instalado al corriente: proximo pago futuro.
+   * aplicarEscenarios: deja a TODOS los clientes del SEED como ATRASADOS del
+   * MES EN CURSO.
+   *
+   * Decision de negocio (cobranza por mes calendario, confirmada por el
+   * usuario): el estado "atrasado/al corriente" ya NO depende de la fecha de
+   * vencimiento rodante individual, sino de si existe un PAGO (movimiento
+   * esPago) con el periodo del mes en curso. Como al sembrar/reiniciar la
+   * lista de movimientos queda VACIA, ningun cliente tiene un pago del mes
+   * actual y, por tanto, los 18 aparecen en "Faltan por pagar (mes en curso)".
+   * El usuario los ira marcando manualmente con el boton "Pagar".
+   *
+   * Por eso la marca '_estatusPago' del SEED ('pagado'/'debe') ya NO crea un
+   * pago del mes en curso: solo la usamos para fijar una fechaProximoPago
+   * historica coherente de cara al display (no afecta la cobranza):
+   *  - a nadie se le pone 'ultimoPago' (no hay pago del ciclo actual).
+   *  - fechaProximoPago se fija al dia de pago del mes en curso, de modo que
+   *    la ficha muestre un vencimiento del mes que efectivamente deben.
+   * Al cambiar de mes natural, la ausencia de un pago con el periodo del nuevo
+   * mes vuelve a marcarlos atrasados automaticamente (reinicio natural).
    */
   function aplicarEscenarios(clientes, hoy) {
-    function en(dias) {
-      var d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-      d.setDate(d.getDate() + dias);
-      return fechaISO(d);
-    }
-
     clientes.forEach(function (c) {
-      if (c._estatusPago === "debe") {
-        // Vencido: ciclo sin cubrir, vencimiento ya pasado.
-        c.fechaProximoPago = en(-7);
-        c.ultimoPago = "";
-      } else if (c._estatusPago === "pagado") {
-        // Al corriente: pago reciente y proximo vencimiento a futuro.
-        c.ultimoPago = en(-5);
-        c.fechaProximoPago = en(25);
-      } else if (c._estatusPago === "enCurso") {
-        // Recien instalado y al corriente: proximo vencimiento a futuro.
-        c.ultimoPago = en(-3);
-        c.fechaProximoPago = en(27);
-      }
+      // Nadie tiene pago del ciclo actual: todos quedan atrasados del mes.
+      c.ultimoPago = "";
+      // Vencimiento en el mes en curso (dia de pago del cliente), solo para el
+      // display de la ficha; NO determina el estado de cobranza.
+      var dia = Number(c.diaPago) || hoy.getDate();
+      c.fechaProximoPago = fechaISO(
+        fechaConDiaDeMes(hoy.getFullYear(), hoy.getMonth(), dia)
+      );
     });
   }
 
@@ -1438,6 +1522,11 @@
 
     // Facturacion objetivo (potencial de cobro mensual)
     facturacionTotalMensual: facturacionTotalMensual,
+
+    // Cobranza por mes calendario (regla principal de estado)
+    mesDe: mesDe,
+    pagoDelMes: pagoDelMes,
+    estaAtrasado: estaAtrasado,
 
     // Reparto de fin de mes entre socios
     luzAplicaEnMes: luzAplicaEnMes,
@@ -1595,19 +1684,23 @@
   }
 
   /* ----------------------------------------------------------
-     Criterio UNICO de "vencido" (hallazgo de revision #1)
+     Criterio UNICO de "atrasado" (cobranza por MES CALENDARIO)
      ------------------------------------------------------------
-     Un cliente SOLO cuenta como vencido si esta Activo y su fecha de
-     vencimiento ya paso. Un cliente Pausado NUNCA es "vencido": no se
-     le cobra mientras esta en pausa. Esta funcion se usa en TODOS los
-     conteos (chip "Vencidos", estadistica de vencidos y panel de Pagos)
-     para que los numeros sean coherentes entre si.
+     Regla confirmada por el usuario (OPCION A): un cliente esta
+     "atrasado/vencido" si esta Activo y NO ha registrado un pago del MES
+     EN CURSO (el mes de HOY). Ya NO se usa la fecha de vencimiento rodante
+     individual para decidir el estado de cobranza. Un cliente Pausado
+     NUNCA cuenta como atrasado: no se le cobra mientras esta en pausa.
+
+     Esta funcion se usa en TODOS los conteos y vistas de cobranza (chip
+     "Vencidos" = faltan por pagar este mes, estadistica de vencidos/al
+     corriente, panel de Pagos y los dos bloques de la lista de clientes)
+     para que todo sea coherente. 'movs' es opcional: si no se pasa, se
+     cargan desde PCC (util para pruebas y llamadas sueltas).
      ---------------------------------------------------------- */
-  function esVencido(cliente) {
-    if (!cliente || cliente.estatus !== "Activo") {
-      return false;
-    }
-    return PCC.estadoPago(cliente, HOY).clase === "vencido";
+  function esVencido(cliente, movs) {
+    movs = Array.isArray(movs) ? movs : movimientos();
+    return PCC.estaAtrasado(cliente, movs, HOY);
   }
 
   /* ----------------------------------------------------------
@@ -1636,8 +1729,8 @@
     renderResumen(lista, movs);
     renderReparto(lista, movs, cfg);
     renderEstadisticas(lista, movs);
-    renderPagos(lista);
-    renderClientes(lista);
+    renderPagos(lista, movs);
+    renderClientes(lista, movs);
     renderDetalle(movs);
     renderBadgeAviso(cfg);
   }
@@ -1755,11 +1848,17 @@
       } else if (c.tipoPago === "Directo") {
         directo += 1;
       }
-      // Criterio unico: un Pausado nunca cuenta como vencido (ver esVencido).
-      if (esVencido(c)) {
-        vencidos += 1;
-      } else {
-        corriente += 1;
+      // Cobranza por mes calendario (ver esVencido / PCC.estaAtrasado):
+      //  - "vencidos"  = Activos que NO han pagado el mes en curso.
+      //  - "corriente" = Activos que SI pagaron el mes en curso.
+      // Un Pausado no cuenta ni como vencido ni como al corriente (no se le
+      // cobra mientras esta en pausa).
+      if (c.estatus === "Activo") {
+        if (esVencido(c, movs)) {
+          vencidos += 1;
+        } else {
+          corriente += 1;
+        }
       }
     });
 
@@ -1794,37 +1893,33 @@
   }
 
   /* ---------------------- Pagos proximos/vencidos ----------- */
-  function renderPagos(lista) {
+  function renderPagos(lista, movs) {
+    movs = Array.isArray(movs) ? movs : movimientos();
     var contenedor = $("#lista-pagos");
     var vacio = $("#pagos-vacio");
     if (!contenedor) {
       return;
     }
 
-    // Solo clientes vencidos o proximos (dentro de la ventana de aviso).
-    // Los Pausados quedan fuera: mismo criterio que esVencido() usa en los
-    // conteos de chips y estadisticas, para que todo sea coherente.
+    // Cobranza por mes calendario: lista a los Activos que FALTAN por pagar
+    // el mes en curso (atrasados). Los Pausados quedan fuera: mismo criterio
+    // que esVencido() usa en chips y estadisticas, para que todo sea
+    // coherente. Al marcar "Pagar" el cliente deja de faltar y sale de aqui.
     var pendientes = lista.filter(function (c) {
-      if (c.estatus !== "Activo") {
-        return false;
-      }
-      var est = PCC.estadoPago(c, HOY);
-      return est.clase === "vencido" || est.clase === "proximo";
+      return esVencido(c, movs);
     });
 
-    // Ordenar por urgencia: menos dias restantes primero (mas vencido antes).
+    // Ordenar por urgencia: mas vencido (fecha de vencimiento mas antigua)
+    // primero. Se conserva el orden por dias restantes como criterio visual.
     pendientes.sort(function (a, b) {
       return PCC.diasRestantes(a, HOY) - PCC.diasRestantes(b, HOY);
     });
 
-    // Resumen de la cabecera: numero de vencidos y suma de sus montos.
-    var numVencidos = 0;
+    // Resumen de la cabecera: cuantos faltan por pagar y la suma de sus cuotas.
+    var numVencidos = pendientes.length;
     var montoVencidos = 0;
     pendientes.forEach(function (c) {
-      if (esVencido(c)) {
-        numVencidos += 1;
-        montoVencidos += Number(c.monto) || 0;
-      }
+      montoVencidos += Number(c.monto) || 0;
     });
     setTexto("#pagos-resumen-num", String(numVencidos));
     setTexto("#pagos-resumen-monto", PCC.formatoMoneda(montoVencidos));
@@ -1846,9 +1941,11 @@
   }
 
   /* ---------------------- Clientes (busqueda/filtro/orden) -- */
-  function renderClientes(lista) {
+  function renderClientes(lista, movs) {
+    movs = Array.isArray(movs) ? movs : movimientos();
     // Conteos de los chips (sobre toda la cartera, independientes de la
-    // busqueda, para que reflejen la totalidad por categoria).
+    // busqueda, para que reflejen la totalidad por categoria). El chip
+    // "Vencidos" cuenta a los Activos que FALTAN por pagar el mes en curso.
     var conteos = {
       todos: lista.length,
       activos: 0,
@@ -1868,7 +1965,7 @@
       } else if (c.tipoPago === "Directo") {
         conteos.directo += 1;
       }
-      if (esVencido(c)) {
+      if (esVencido(c, movs)) {
         conteos.vencidos += 1;
       }
     });
@@ -1879,7 +1976,7 @@
     setTexto("#cuenta-ptp", String(conteos.ptp));
     setTexto("#cuenta-directo", String(conteos.directo));
 
-    // Aplicar filtro por chip.
+    // Aplicar filtro por chip. El chip "Vencidos" = faltan por pagar el mes.
     var filtrados = lista.filter(function (c) {
       switch (estado.filtroActivo) {
         case "activos":
@@ -1887,7 +1984,7 @@
         case "pausados":
           return c.estatus === "Pausado";
         case "vencidos":
-          return esVencido(c);
+          return esVencido(c, movs);
         case "ptp":
           return c.tipoPago === "PTP";
         case "directo":
@@ -1936,9 +2033,84 @@
     if (vacio) {
       vacio.hidden = true;
     }
-    filtrados.forEach(function (c) {
-      contenedor.appendChild(crearTarjeta(c));
+
+    // Separacion visual por cobranza del mes en curso. Cuando el filtro por
+    // chip permite ver atrasados y al corriente juntos ("todos" o "activos"),
+    // se muestran DOS bloques con encabezado: primero "Faltan por pagar"
+    // (arriba, acento rojo) y luego "Ya pagaron". En los demas filtros
+    // (Pausados, PTP, Directo, Vencidos) se pinta una lista plana, pues el
+    // propio filtro ya acota el conjunto. Al marcar Pagar y re-renderizar, el
+    // cliente salta del bloque "faltan" al bloque "ya pagaron".
+    var mesTexto = (MESES[HOY.getMonth()] || "").toLowerCase();
+    var usaBloques =
+      estado.filtroActivo === "todos" || estado.filtroActivo === "activos";
+
+    if (!usaBloques) {
+      filtrados.forEach(function (c) {
+        contenedor.appendChild(crearTarjeta(c, movs));
+      });
+      return;
+    }
+
+    // Tres grupos: (1) Activos que FALTAN por pagar el mes (arriba, rojo),
+    // (2) Activos que YA pagaron el mes (verde) y (3) Pausados (no se les
+    // cobra, van al final sin entrar en ninguno de los dos cobros).
+    var faltan = filtrados.filter(function (c) {
+      return c.estatus === "Activo" && esVencido(c, movs);
     });
+    var pagaron = filtrados.filter(function (c) {
+      return c.estatus === "Activo" && !esVencido(c, movs);
+    });
+    var pausados = filtrados.filter(function (c) {
+      return c.estatus === "Pausado";
+    });
+
+    if (faltan.length) {
+      contenedor.appendChild(
+        crearEncabezadoGrupo(
+          "⚠️ Faltan por pagar (" + mesTexto + ")",
+          faltan.length,
+          "grupo-clientes__titulo--faltan"
+        )
+      );
+      faltan.forEach(function (c) {
+        contenedor.appendChild(crearTarjeta(c, movs));
+      });
+    }
+
+    if (pagaron.length) {
+      contenedor.appendChild(
+        crearEncabezadoGrupo(
+          "✅ Ya pagaron (" + mesTexto + ")",
+          pagaron.length,
+          "grupo-clientes__titulo--pagaron"
+        )
+      );
+      pagaron.forEach(function (c) {
+        contenedor.appendChild(crearTarjeta(c, movs));
+      });
+    }
+
+    if (pausados.length) {
+      contenedor.appendChild(
+        crearEncabezadoGrupo("⏸️ Pausados", pausados.length, "")
+      );
+      pausados.forEach(function (c) {
+        contenedor.appendChild(crearTarjeta(c, movs));
+      });
+    }
+  }
+
+  /**
+   * crearEncabezadoGrupo(texto, cuenta, claseExtra): crea el subtitulo de un
+   * bloque de la lista de clientes ("Faltan por pagar" / "Ya pagaron") con el
+   * conteo entre parentesis. Ocupa una fila completa del grid.
+   */
+  function crearEncabezadoGrupo(texto, cuenta, claseExtra) {
+    var h = document.createElement("h3");
+    h.className = "grupo-clientes__titulo " + (claseExtra || "");
+    h.textContent = texto + " · " + cuenta;
+    return h;
   }
 
   /* ---------------------- Detalle de movimientos ------------ */
@@ -2007,10 +2179,31 @@
      ========================================================== */
   var tplTarjeta = $("#tpl-tarjeta-cliente");
 
-  function crearTarjeta(cliente) {
+  /**
+   * estadoCobranza(cliente, movs): resuelve el badge de cobranza por MES
+   * CALENDARIO de una tarjeta. Devuelve { clase, texto } donde:
+   *  - Pausado         -> { 'ok',      'Pausado' }
+   *  - Activo atrasado -> { 'vencido', 'Debe <mes>' }   (falta pagar el mes)
+   *  - Activo al dia   -> { 'pagado',  'Pagado (<mes>)' } (ya pago el mes)
+   * El <mes> es siempre el mes en curso (HOY). 'clase' reutiliza las clases
+   * CSS existentes (estado-vencido / estado-pagado / estado-ok) para el color.
+   */
+  function estadoCobranza(cliente, movs) {
+    var mesTexto = (MESES[HOY.getMonth()] || "").toLowerCase();
+    if (cliente && cliente.estatus === "Pausado") {
+      return { clase: "ok", texto: "Pausado" };
+    }
+    if (esVencido(cliente, movs)) {
+      return { clase: "vencido", texto: "Debe " + mesTexto };
+    }
+    return { clase: "pagado", texto: "Pagado (" + mesTexto + ")" };
+  }
+
+  function crearTarjeta(cliente, movs) {
+    movs = Array.isArray(movs) ? movs : movimientos();
     var frag = tplTarjeta.content.cloneNode(true);
     var art = frag.querySelector(".tarjeta");
-    var est = PCC.estadoPago(cliente, HOY);
+    var est = estadoCobranza(cliente, movs);
 
     art.setAttribute("data-id", cliente.id);
     art.classList.add("tarjeta--" + est.clase);
@@ -2119,19 +2312,21 @@
       window.alert("Este cliente no tiene un número de celular registrado.");
       return;
     }
-    var est = PCC.estadoPago(cliente, HOY);
-    var venceTxt = PCC.formatoFechaLarga(cliente.fechaProximoPago);
+    // Cobranza por MES CALENDARIO: el recordatorio es sobre el pago del MES
+    // EN CURSO. "atrasado" = Activo que aun no paga el mes (esVencido).
+    var atrasado = esVencido(cliente, movimientos());
+    var mesTexto = (MESES[HOY.getMonth()] || "").toLowerCase();
     var montoTxt = PCC.formatoMoneda(cliente.monto);
     var mensaje =
       "Hola " +
       (cliente.nombre || "") +
-      ", le recordamos su pago de internet por " +
+      ", le recordamos su pago de internet de " +
+      mesTexto +
+      " por " +
       montoTxt +
-      ". Fecha de vencimiento: " +
-      venceTxt +
       ". " +
-      (est.clase === "vencido"
-        ? "Su pago está vencido, agradecemos ponerse al corriente. "
+      (atrasado
+        ? "Aún no lo tenemos registrado este mes, agradecemos ponerse al corriente. "
         : "") +
       "¡Gracias!";
     var url =
@@ -2150,7 +2345,12 @@
     setTexto("#pago-cliente-nombre", cliente.nombre || "");
     setValor("#pago-monto", cliente.monto != null ? cliente.monto : "");
 
-    var porDefecto = PCC.periodoPorDefecto(cliente, new Date());
+    // Cobranza por MES CALENDARIO: por defecto el pago cubre el MES EN CURSO
+    // (el mes de HOY), para que al pagar el cliente pase a "ya pago este mes"
+    // y salga del bloque "Faltan por pagar". El usuario puede elegir otro mes
+    // en el selector (meses alrededor) si necesita registrar un pago atrasado
+    // o adelantado.
+    var porDefecto = PCC.mesDe(HOY);
     var opciones = construirOpcionesPeriodo(porDefecto, 3, 3);
     var sel = $("#pago-periodo");
     if (sel) {
@@ -2352,7 +2552,7 @@
       return acc + (Number(m.monto) || 0);
     }, 0);
     var ultimoPagoMov = pagos.length ? pagos[0] : null;
-    var est = PCC.estadoPago(cliente, HOY);
+    var estCob = estadoCobranza(cliente, movimientos());
 
     setTexto("#historial-cliente", cliente.nombre ? "· " + cliente.nombre : "");
     setTexto("#historial-total", PCC.formatoMoneda(totalPagado));
@@ -2366,18 +2566,12 @@
     );
     var elEstado = $("#historial-estado");
     if (elEstado) {
-      // Etiqueta normalizada que cumple la promesa del README ("solo un cliente
-      // Activo y atrasado cuenta como vencido"): se reutiliza el predicado
-      // esVencido(cliente) (mismo criterio del chip Vencidos, la estadistica y
-      // el panel de Pagos), que exige estatus 'Activo' antes de considerar
-      // vencido. Un cliente Pausado con fecha pasada NO se rotula "Vencido".
-      // Se conserva el detalle de estadoPago entre parentesis y la clase CSS
-      // del badge (estado-<clase>) para no perder contexto ni color.
-      var etiquetaEstado = esVencido(cliente) ? "Vencido" : "Al corriente";
-      elEstado.textContent = est.texto
-        ? etiquetaEstado + " (" + est.texto + ")"
-        : etiquetaEstado;
-      elEstado.className = "estado-cuenta__valor badge estado-" + est.clase;
+      // Estado de cuenta por MES CALENDARIO (mismo criterio que la tarjeta,
+      // los chips, la estadistica y el panel de Pagos): "Debe <mes>" si falta
+      // pagar el mes en curso, "Pagado (<mes>)" si ya pago, "Pausado" si no se
+      // le cobra. La clase CSS del badge (estado-<clase>) conserva el color.
+      elEstado.textContent = estCob.texto;
+      elEstado.className = "estado-cuenta__valor badge estado-" + estCob.clase;
     }
 
     // El pago reversible es el ultimo pago del cliente (mismo criterio que

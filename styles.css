@@ -653,6 +653,33 @@ body {
   gap: 14px;
 }
 
+/* Subtitulos de los dos bloques de la lista de clientes (cobranza del mes):
+   "Faltan por pagar" (acento rojo, arriba) y "Ya pagaron" (acento verde).
+   Ocupan toda la fila del grid para separar visualmente ambos grupos. */
+.grupo-clientes__titulo {
+  grid-column: 1 / -1;
+  margin: 6px 0 2px;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: var(--radio-sm);
+  border-left: 4px solid var(--borde-fuerte);
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.grupo-clientes__titulo--faltan {
+  border-left-color: var(--rojo);
+  background: var(--rojo-suave);
+  color: var(--rojo);
+}
+
+.grupo-clientes__titulo--pagaron {
+  border-left-color: var(--verde);
+  background: var(--verde-suave);
+  color: var(--verde);
+}
+
 .tarjeta {
   background: var(--superficie);
   border: 1px solid var(--borde);

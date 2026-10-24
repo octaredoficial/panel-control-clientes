@@ -111,20 +111,33 @@ Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-
 
 > **¿Por qué parece que "falta dinero"?** No se pierde dinero. La **Facturación total del mes** es el *objetivo* (lo que podrías cobrar) y los **Ingresos** son lo *real* ya cobrado. Al principio del mes, *Ingresos* es bajo porque casi nadie ha pagado todavía; conforme pulsas **Pagar** en cada cliente, *Ingresos* sube. La **diferencia** entre la facturación y lo cobrado es, precisamente, lo que **falta por cobrar** (y la métrica *Por cobrar* te lo muestra). Cuando todos paguen, *Ingresos* se acerca a la facturación total.
 - **Reparto de fin de mes** (panel justo debajo del Resumen): calcula cómo se divide la ganancia del mes entre los dos socios, **Carlos** y **Octavio**. Comparte la navegación de mes del Resumen (usa el mes seleccionado con `‹` / `›`) y se recalcula al cambiar de mes o al registrar un pago o un gasto. Ver [Reparto de fin de mes entre socios](#reparto-de-fin-de-mes-entre-socios).
-- **Estadísticas**: clientes activos y pausados, y un desplegable con estadísticas del mes (al corriente, vencidos, pagos cobrados, PTP, Directo y ahorro acumulado). *Pagos cobrados este mes* cuenta únicamente los cobros registrados con el botón **Pagar** de una tarjeta de cliente; un ingreso capturado a mano con **Nuevo Ingreso** suma a *Ingresos* pero no a este contador.
-- **Pagos próximos o vencidos**: lista ordenada por urgencia (lo más vencido primero), con el total de vencidos en la cabecera y un aviso configurable de "N días antes".
+- **Estadísticas**: clientes activos y pausados, y un desplegable con estadísticas del mes (al corriente = pagaron este mes, vencidos = faltan este mes, pagos cobrados, PTP, Directo y ahorro acumulado). *Pagos cobrados este mes* cuenta únicamente los cobros registrados con el botón **Pagar** de una tarjeta de cliente; un ingreso capturado a mano con **Nuevo Ingreso** suma a *Ingresos* pero no a este contador.
+- **Faltan por pagar este mes**: lista los clientes **Activos** que aún no han registrado un pago del **mes en curso**, ordenados por urgencia (lo más atrasado primero), con el total de los que faltan en la cabecera y un aviso configurable de "N días antes".
 
-> **Criterio de "vencido"**: un cliente se considera vencido solo si está **Activo** y su fecha de pago ya pasó. Un cliente **Pausado** nunca cuenta como vencido (no se le cobra mientras está en pausa), y este mismo criterio se aplica de forma coherente en el chip *Vencidos*, en la estadística de vencidos y en el panel de Pagos.
+> ### Cobranza por **mes calendario** (regla principal)
 >
-> El **estado de pago** de los clientes (vencido / próximo / pagado), las **estadísticas** y el panel de **Pagos** se calculan siempre **a la fecha de hoy**, aunque navegues a otros meses con `‹` / `›`. La navegación de mes solo afecta a las métricas del resumen (Ingresos, Egresos, Ganancia y Por cobrar) y al detalle de movimientos. Por eso los paneles de Estadísticas y Pagos muestran la etiqueta *"a la fecha de hoy"*.
+> El cobro es **mensual por mes natural**. Un cliente está **atrasado / vencido** cuando está **Activo** y **no ha registrado un pago del mes en curso**, sin importar su fecha de vencimiento individual. Es decir: *atrasado = no pagó el mes de hoy*.
+>
+> - **Ya no** se usa la fecha de vencimiento rodante por cliente para decidir el estado de cobranza (antes un cliente con "próximo pago" a futuro aparecía como *Pagado* aunque no hubiera pagado el mes; eso ya no ocurre).
+> - Un cliente **Pausado** nunca cuenta como atrasado (no se le cobra mientras está en pausa).
+> - Este mismo criterio se aplica de forma **coherente** en: la estadística *Clientes al corriente* (los que **sí** pagaron el mes) y *Clientes vencidos* (los que **faltan**), el **chip _Vencidos_** (que ahora significa "faltan por pagar este mes"), el panel **Faltan por pagar este mes** y el **badge** de cada tarjeta.
+> - El badge de la tarjeta dice **"Debe _mes_"** (rojo) para quien falta y **"Pagado (_mes_)"** (verde) para quien ya pagó; los Pausados muestran **"Pausado"**.
+>
+> **Separación visual "Faltan por pagar / Ya pagaron":** en *Clientes activos y pausados* (filtros *Todos* y *Activos*) la lista se parte en bloques con encabezado: primero **⚠️ Faltan por pagar (_mes_)** (arriba, acento rojo), luego **✅ Ya pagaron (_mes_)** (verde) y al final **⏸️ Pausados**. Al pulsar **Pagar** en un cliente y re-renderizar, este salta del bloque *faltan* al bloque *ya pagaron*.
+>
+> **Reinicio mensual automático (natural):** como la regla mira el **periodo del mes en curso**, al cambiar de mes natural **todos** vuelven a aparecer como *faltan por pagar* **sin tocar datos ni programar nada**: simplemente, ningún pago tiene el periodo del mes nuevo. No hay cron ni proceso manual; la ausencia del pago del nuevo mes los marca atrasados por sí sola.
+>
+> El estado de cobranza se calcula siempre **a la fecha de hoy**, aunque navegues a otros meses con `‹` / `›`. La navegación de mes solo afecta a las métricas del resumen (Ingresos, Egresos, Ganancia y Por cobrar), al detalle de movimientos y al reparto. Por eso los paneles de Estadísticas y de Pagos muestran la etiqueta *"a la fecha de hoy"*.
+>
+> En el núcleo (`window.PCC`) esta regla vive en dos funciones puras y testeables: `pagoDelMes(cliente, movimientos, fechaRef)` (true si hay un pago `esPago` del cliente con `periodo` del mes de `fechaRef`, o cuya `fecha` cae en ese mes para pagos viejos sin `periodo`) y `estaAtrasado(cliente, movimientos, fechaRef)` (Activo y sin pago del mes).
 - **Clientes activos y pausados**:
   - **Búsqueda** por nombre, teléfono, dirección o IP.
-  - **Filtros** (chips) con conteos: Todos, Activos, Pausados, Vencidos, PTP, Directo.
+  - **Filtros** (chips) con conteos: Todos, Activos, Pausados, Vencidos (= faltan por pagar este mes), PTP, Directo.
   - **Orden**: por próximo pago (predeterminado), por nombre o por monto.
   - **Exportar a CSV**: descarga el archivo `clientes.csv`.
 - **Acciones por cliente** (en cada tarjeta):
-  - **Avisar**: abre WhatsApp con un mensaje prellenado (nombre, monto adeudado y fecha de vencimiento).
-  - **Pagar**: registra el pago del mes, marca al cliente como pagado y recalcula su próxima fecha de pago.
+  - **Avisar**: abre WhatsApp con un mensaje prellenado (nombre, mes en curso y monto); si el cliente aún no pagó el mes, añade una nota de que no está registrado el pago.
+  - **Pagar**: registra el pago del **mes en curso** (por defecto), con lo que el cliente pasa a *ya pagó este mes* y salta al bloque *Ya pagaron*; además recalcula su próxima fecha de pago al mes siguiente. El mes siguiente volverá a aparecer como por cobrar automáticamente.
   - **Revertir** (↩️): deshace el último pago registrado del cliente (por si pulsaste **Pagar** por error). Solo aparece cuando el cliente tiene algún pago que se pueda deshacer. Ver [Revertir / deshacer un pago](#revertir--deshacer-un-pago).
   - **Editar**: abre el formulario del cliente con sus datos cargados.
   - **Pausar / Reanudar**: alterna el estatus del cliente.
@@ -154,7 +167,7 @@ Cada pago que registras genera un **recibo** y queda guardado en el **historial 
 
 En la tarjeta de cada cliente aparece el botón **📜 Historial**. Al pulsarlo se abre una ventana con:
 
-- Un **estado de cuenta** con cuatro datos: **Total pagado** (suma histórica de todos sus pagos cobrados), **Último pago**, **Próximo vencimiento** y **Estado actual** (**al corriente** o **vencido**, con el mismo criterio que el resto de la app: solo un cliente **Activo** y atrasado cuenta como vencido).
+- Un **estado de cuenta** con cuatro datos: **Total pagado** (suma histórica de todos sus pagos cobrados), **Último pago**, **Próximo vencimiento** y **Estado actual** (**Pagado (_mes_)**, **Debe _mes_** o **Pausado**, con el mismo criterio de cobranza por mes calendario que el resto de la app: un cliente Activo que no pagó el mes en curso está atrasado).
 - La **lista de pagos** del cliente ordenada de más reciente a más antiguo. Cada fila muestra la **fecha** del pago, el **periodo** (mensualidad) que cubre, el **monto**, el **socio** al que pagó y el **folio** del recibo.
 - Botones por fila para **🧾 Ver recibo** (reimprime o reenvía ese recibo) y **↩️ Revertir** (solo en el último pago reversible del cliente, igual que en la tarjeta).
 
@@ -271,7 +284,7 @@ Reglas con las que se cargan:
 - **El único que paga directamente a Octavio es `casa 44 LIZBETH`** (socio **Octavio**); el resto paga a **Carlos**. Esto es lo que usa el [Reparto de fin de mes](#reparto-de-fin-de-mes-entre-socios).
 - **Instalación en $0** para todos (no se cobra instalación en este alta).
 - **Monto, megas y día de pago** son los reales de cada cliente (por ejemplo, *Nieto* 20 MB $600, *Reyes vecino* 30 MB $600, *Mercedez RH* 10 MB $400). El día de pago se deriva de la fecha de instalación.
-- **Estado de pago realista:** los marcados como "al corriente" (PAGADO) quedan con un pago reciente y su próximo vencimiento a futuro; los que "deben" (DEBE) quedan como **Vencido** (vencimiento ya pasado y sin pago del ciclo).
+- **Todos quedan ATRASADOS del mes en curso al reiniciar.** Bajo la [cobranza por mes calendario](#cobranza-por-mes-calendario-regla-principal), al sembrar o reiniciar los datos la lista de movimientos queda **vacía**, así que **ningún cliente tiene un pago del mes actual** y los 18 aparecen en **⚠️ Faltan por pagar (_mes_)**. El dashboard muestra **18 por cobrar / 0 pagados este mes**. La marca histórica PAGADO/DEBE del dataset ya **no** crea un pago del mes en curso: el usuario va marcando manualmente con **Pagar** quién ya pagó. Como consecuencia, ningún cliente del SEED trae `ultimoPago`. Al cambiar de mes natural, todos vuelven a faltar por pagar automáticamente.
 - **Facturación total (objetivo):** la suma de las cuotas mensuales de los 18 clientes activos es **$9,400**.
 
 > **Decisión sobre `tipoPago` (financiero PTP/Directo):** como la lista real no trae este dato, los 18 clientes se cargan con `tipoPago = "Directo"` por defecto. Este campo es solo una **etiqueta financiera informativa** (y alimenta los chips y estadísticas de PTP/Directo); **no altera el reparto entre socios**, que depende únicamente del campo **socio** (Carlos / Octavio). Puedes cambiar el `tipoPago` de cada cliente cuando quieras desde su ficha sin que eso afecte las cuentas del reparto.

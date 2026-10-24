@@ -219,11 +219,11 @@
           <div class="desplegable__cuerpo">
             <ul class="stats-mes__lista">
               <li class="stats-mes__item">
-                <span class="stats-mes__etiqueta">Clientes al corriente</span>
+                <span class="stats-mes__etiqueta">Clientes al corriente (pagaron este mes)</span>
                 <span class="stats-mes__valor" id="stat-mes-corriente">0</span>
               </li>
               <li class="stats-mes__item">
-                <span class="stats-mes__etiqueta">Clientes vencidos</span>
+                <span class="stats-mes__etiqueta">Clientes vencidos (faltan este mes)</span>
                 <span class="stats-mes__valor" id="stat-mes-vencidos">0</span>
               </li>
               <li class="stats-mes__item">
@@ -251,11 +251,11 @@
       <section class="panel panel--pagos" aria-labelledby="pagos-titulo">
         <div class="panel__cabecera panel__cabecera--pagos">
           <div>
-            <h2 class="panel__titulo" id="pagos-titulo">Pagos Próximos o Vencidos
-              <span class="panel__nota" title="Vencidos y próximos se calculan contra la fecha de hoy, no según el mes seleccionado arriba.">a la fecha de hoy</span>
+            <h2 class="panel__titulo" id="pagos-titulo">Faltan por pagar este mes
+              <span class="panel__nota" title="Un cliente falta por pagar si está Activo y no ha registrado un pago del mes en curso. Se calcula contra el mes de hoy, no según el mes seleccionado arriba.">a la fecha de hoy</span>
             </h2>
             <p class="pagos__resumen">
-              <span id="pagos-resumen-num">0</span> vencidos
+              <span id="pagos-resumen-num">0</span> faltan por pagar
               <span class="pagos__sep" aria-hidden="true">·</span>
               <span id="pagos-resumen-monto">$0.00</span>
             </p>
@@ -265,7 +265,7 @@
 
         <!-- FEAT-003 inyecta aqui tarjetas de pago (plantilla: .tarjeta.tarjeta--cliente) -->
         <div class="lista-tarjetas" id="lista-pagos">
-          <p class="estado-vacio" id="pagos-vacio">No hay pagos próximos ni vencidos.</p>
+          <p class="estado-vacio" id="pagos-vacio">Todos pagaron el mes en curso. No falta nadie por pagar.</p>
         </div>
       </section>
 
@@ -293,7 +293,7 @@
             <button type="button" class="chip" data-filtro="pausados">
               Pausados <span class="chip__cuenta" id="cuenta-pausados">0</span>
             </button>
-            <button type="button" class="chip" data-filtro="vencidos">
+            <button type="button" class="chip" data-filtro="vencidos" title="Faltan por pagar el mes en curso">
               Vencidos <span class="chip__cuenta" id="cuenta-vencidos">0</span>
             </button>
             <button type="button" class="chip" data-filtro="ptp">
