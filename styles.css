@@ -701,6 +701,9 @@ body {
 .tarjeta--vencido { border-left: 3px solid var(--rojo); }
 .tarjeta--proximo { border-left: 3px solid var(--ambar); }
 .tarjeta--pagado { border-left: 3px solid var(--verde); }
+/* Neutro: cliente que falta por pagar el mes pero cuyo dia de pago aun no
+   llega (badge "Faltan N días"). Acento lateral suave. */
+.tarjeta--ok { border-left: 3px solid var(--borde-fuerte); }
 
 .tarjeta__cabecera {
   display: flex;

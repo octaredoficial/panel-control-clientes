@@ -585,6 +585,73 @@
     };
   }
 
+  /**
+   * textoDiasCobranza(dias, diasAviso): helper PURO que arma el detalle de
+   * dias que se muestra en la tarjeta de un cliente que FALTA por pagar el
+   * mes en curso. Traduce los dias restantes contra su fecha de vencimiento
+   * individual (diaPago del mes) a { clase, texto }, reutilizando las clases
+   * de color existentes:
+   *
+   *   dias < 0            -> { 'vencido', 'Vencido hace N días' }   (rojo)
+   *   dias === 0          -> { 'proximo', 'Vence hoy' }             (ambar)
+   *   dias === 1          -> { 'proximo', 'Vence mañana' }          (ambar)
+   *   1 < dias <= aviso   -> { 'proximo', 'Vence en N días' }       (ambar)
+   *   dias > diasAviso    -> { 'ok',      'Faltan N días' }         (neutro)
+   *
+   * OJO: esto es SOLO presentacion del detalle de dias. NO decide si el
+   * cliente esta "atrasado/por pagar" (eso lo hace estaAtrasado, por mes
+   * calendario). Un cliente puede faltar por pagar el mes y, segun su dia
+   * de pago, mostrar "Faltan 6 días" (aun no llega su dia) o "Vencido hace
+   * 3 días" (su dia ya paso).
+   *
+   * @param {number} dias dias restantes (de diasRestantes); negativo = vencido
+   * @param {number} [diasAviso] ventana de aviso (default: config o 3)
+   * @returns {{clase:string, texto:string}}
+   */
+  function textoDiasCobranza(dias, diasAviso) {
+    if (diasAviso == null) {
+      var cfg = cargarConfig();
+      diasAviso = cfg && cfg.diasAviso != null ? Number(cfg.diasAviso) : 3;
+    }
+    dias = Number(dias) || 0;
+
+    if (dias < 0) {
+      var vencidoN = Math.abs(dias);
+      return {
+        clase: "vencido",
+        texto:
+          vencidoN === 1
+            ? "Vencido hace 1 día"
+            : "Vencido hace " + vencidoN + " días"
+      };
+    }
+    if (dias === 0) {
+      return { clase: "proximo", texto: "Vence hoy" };
+    }
+    if (dias === 1) {
+      return { clase: "proximo", texto: "Vence mañana" };
+    }
+    if (dias <= diasAviso) {
+      return { clase: "proximo", texto: "Vence en " + dias + " días" };
+    }
+    return { clase: "ok", texto: "Faltan " + dias + " días" };
+  }
+
+  /**
+   * compararUrgencia(a, b, hoy): comparador PURO para ordenar clientes de MAS
+   * VENCIDO a MENOS. Ordena por diasRestantes ascendente: los mas negativos
+   * (mas dias vencidos) primero, luego 0/positivos crecientes. Pensado para
+   * el bloque "Faltan por pagar este mes" (panel de pagos y grupo de la lista
+   * de clientes). Se usa como argumento de Array.prototype.sort.
+   * @param {Object} a
+   * @param {Object} b
+   * @param {Date|string|number} [hoy]
+   * @returns {number}
+   */
+  function compararUrgencia(a, b, hoy) {
+    return diasRestantes(a, hoy) - diasRestantes(b, hoy);
+  }
+
   /* ----------------------------------------------------------
      6.b Reparto de fin de mes entre socios (Carlos / Octavio)
      ------------------------------------------------------------
@@ -1519,6 +1586,8 @@
     calcularProximoPago: calcularProximoPago,
     diasRestantes: diasRestantes,
     estadoPago: estadoPago,
+    textoDiasCobranza: textoDiasCobranza,
+    compararUrgencia: compararUrgencia,
 
     // Facturacion objetivo (potencial de cobro mensual)
     facturacionTotalMensual: facturacionTotalMensual,
@@ -1909,10 +1978,11 @@
       return esVencido(c, movs);
     });
 
-    // Ordenar por urgencia: mas vencido (fecha de vencimiento mas antigua)
-    // primero. Se conserva el orden por dias restantes como criterio visual.
+    // Ordenar por urgencia (helper puro PCC.compararUrgencia): mas vencido
+    // primero (diasRestantes ascendente -> los mas negativos arriba), luego
+    // los que vencen pronto y al final los que aun les faltan dias.
     pendientes.sort(function (a, b) {
-      return PCC.diasRestantes(a, HOY) - PCC.diasRestantes(b, HOY);
+      return PCC.compararUrgencia(a, b, HOY);
     });
 
     // Resumen de la cabecera: cuantos faltan por pagar y la suma de sus cuotas.
@@ -2013,8 +2083,11 @@
       if (estado.ordenActual === "monto") {
         return (Number(b.monto) || 0) - (Number(a.monto) || 0);
       }
-      // 'proximo' (default): por dias restantes ascendente (urgencia).
-      return PCC.diasRestantes(a, HOY) - PCC.diasRestantes(b, HOY);
+      // 'proximo' (default): por urgencia (helper puro). diasRestantes
+      // ascendente -> mas vencido primero. Como el bloque "Faltan por pagar"
+      // se construye filtrando este array ya ordenado, queda de mas vencido a
+      // menos sin reordenar.
+      return PCC.compararUrgencia(a, b, HOY);
     });
 
     var contenedor = $("#lista-clientes");
@@ -2063,6 +2136,16 @@
     });
     var pausados = filtrados.filter(function (c) {
       return c.estatus === "Pausado";
+    });
+
+    // El bloque "Faltan por pagar" SIEMPRE se muestra por urgencia (mas
+    // vencido primero), aunque el usuario elija ordenar por nombre o monto:
+    // asi lo mas atrasado queda arriba del todo. Con el orden por defecto
+    // ("por proximo pago") el array ya viene ordenado por urgencia, por lo
+    // que este sort no cambia nada; con otros ordenes, reordena solo este
+    // bloque de atrasados.
+    faltan.sort(function (a, b) {
+      return PCC.compararUrgencia(a, b, HOY);
     });
 
     if (faltan.length) {
@@ -2180,13 +2263,18 @@
   var tplTarjeta = $("#tpl-tarjeta-cliente");
 
   /**
-   * estadoCobranza(cliente, movs): resuelve el badge de cobranza por MES
-   * CALENDARIO de una tarjeta. Devuelve { clase, texto } donde:
+   * estadoCobranza(cliente, movs): resuelve el badge de cobranza de una
+   * tarjeta. La PERTENENCIA (falta por pagar vs ya pago) sigue siendo por MES
+   * CALENDARIO (esVencido / PCC.estaAtrasado); lo que cambia aqui es el
+   * DETALLE que se muestra:
    *  - Pausado         -> { 'ok',      'Pausado' }
-   *  - Activo atrasado -> { 'vencido', 'Debe <mes>' }   (falta pagar el mes)
+   *  - Activo atrasado -> dias contra SU vencimiento del mes (diaPago), via
+   *                       PCC.textoDiasCobranza(diasRestantes): "Vencido hace
+   *                       N días" (rojo) / "Vence hoy|mañana|en N días"
+   *                       (ambar) / "Faltan N días" (neutro).
    *  - Activo al dia   -> { 'pagado',  'Pagado (<mes>)' } (ya pago el mes)
-   * El <mes> es siempre el mes en curso (HOY). 'clase' reutiliza las clases
-   * CSS existentes (estado-vencido / estado-pagado / estado-ok) para el color.
+   * El <mes> es el mes en curso (HOY). 'clase' reutiliza las clases CSS
+   * existentes (estado-vencido / estado-proximo / estado-pagado / estado-ok).
    */
   function estadoCobranza(cliente, movs) {
     var mesTexto = (MESES[HOY.getMonth()] || "").toLowerCase();
@@ -2194,7 +2282,10 @@
       return { clase: "ok", texto: "Pausado" };
     }
     if (esVencido(cliente, movs)) {
-      return { clase: "vencido", texto: "Debe " + mesTexto };
+      // Falta por pagar el mes (criterio por mes calendario). El TEXTO detalla
+      // los dias contra su fecha de vencimiento individual del mes (diaPago).
+      var dias = PCC.diasRestantes(cliente, HOY);
+      return PCC.textoDiasCobranza(dias);
     }
     return { clase: "pagado", texto: "Pagado (" + mesTexto + ")" };
   }
@@ -2566,10 +2657,11 @@
     );
     var elEstado = $("#historial-estado");
     if (elEstado) {
-      // Estado de cuenta por MES CALENDARIO (mismo criterio que la tarjeta,
-      // los chips, la estadistica y el panel de Pagos): "Debe <mes>" si falta
-      // pagar el mes en curso, "Pagado (<mes>)" si ya pago, "Pausado" si no se
-      // le cobra. La clase CSS del badge (estado-<clase>) conserva el color.
+      // Estado de cuenta: reutiliza estadoCobranza (mismo criterio y mismo
+      // badge que la tarjeta). Si falta pagar el mes, muestra el detalle de
+      // dias contra su dia de pago ("Vencido hace N días" / "Vence hoy|
+      // mañana|en N días" / "Faltan N días"); "Pagado (<mes>)" si ya pago y
+      // "Pausado" si no se le cobra. La clase CSS (estado-<clase>) da el color.
       elEstado.textContent = estCob.texto;
       elEstado.className = "estado-cuenta__valor badge estado-" + estCob.clase;
     }
