@@ -906,6 +906,364 @@
   }
 
   /* ----------------------------------------------------------
+     6.b.bis HISTORIAL DE MESES (logica pura, testeable)
+     ------------------------------------------------------------
+     Resume cada mes reutilizando el negocio existente (calcularReparto,
+     gastosFijosDelMes, facturacionTotalMensual, pagoDelMes) SIN cambiar
+     ninguna formula. La UI (FEAT-002) consume estas funciones para pintar
+     la tabla + grafica; aqui todo es puro (no toca DOM ni persistencia).
+
+     Meses manuales: capturas historicas que viven en
+     cfg.historialManual = [{ mes:'YYYY-MM', cobrado, gastos?, totalCarlos?,
+     totalOctavio?, nota? }]. Las funciones de meses manuales SOLO
+     transforman el objeto cfg (puras). La persistencia la hace la UI con
+     PCC.guardarConfig(nuevoCfg) (firebase-sync.js lo propaga a Firestore).
+     ---------------------------------------------------------- */
+
+  /**
+   * resumenMensual(fecha, clientes, movimientos, cfg): datos de UN mes,
+   * REUTILIZANDO calcularReparto (misma logica de pagos esPago del mes que
+   * ya usa el Reparto). Es puro: no muta nada.
+   *
+   * NOTA sobre meses pasados: 'facturado', 'pagaron' y 'noPagaron' se
+   * calculan con el padron ACTUAL de clientes (facturacionTotalMensual y
+   * pagoDelMes recorren la lista de clientes de hoy). Para meses historicos
+   * son una referencia aproximada, no una foto del padron de ese mes.
+   *
+   * @param {Date|string|number} fecha
+   * @param {Array<Object>} clientes
+   * @param {Array<Object>} movimientos
+   * @param {Object} [cfg]
+   * @returns {Object} resumen con fuente:'real'
+   */
+  function resumenMensual(fecha, clientes, movimientos, cfg) {
+    cfg = cfg || cargarConfig();
+    clientes = Array.isArray(clientes) ? clientes : [];
+    movimientos = Array.isArray(movimientos) ? movimientos : [];
+    var ref = aFecha(fecha);
+    var r = calcularReparto(ref, clientes, movimientos, cfg);
+    var facturado = facturacionTotalMensual(clientes);
+    var cobrado = r.ingresosMes;
+    var porcentaje = facturado > 0 ? cobrado / facturado : 0;
+
+    // pagaron/noPagaron evaluados contra el mes dado (no contra hoy).
+    var pagaron = 0;
+    var noPagaron = 0;
+    for (var i = 0; i < clientes.length; i++) {
+      var c = clientes[i];
+      if (!c) {
+        continue;
+      }
+      var pago = pagoDelMes(c, movimientos, ref);
+      if (pago) {
+        pagaron += 1;
+      } else if (c.estatus === "Activo") {
+        noPagaron += 1;
+      }
+    }
+
+    return {
+      mes: mesDe(ref),
+      fecha: ref,
+      cobrado: cobrado,
+      facturado: facturado,
+      porcentajeCobranza: porcentaje,
+      gastosFijos: r.gastosFijos,
+      starlink: r.starlink,
+      luz: r.luz,
+      luzAplica: r.luzAplica,
+      gananciaRepartir: r.gananciaRepartir,
+      totalCarlos: r.totalCarlos,
+      totalOctavio: r.totalOctavio,
+      pagaron: pagaron,
+      noPagaron: noPagaron,
+      fuente: "real"
+    };
+  }
+
+  /**
+   * esMesValido(mes): true si 'mes' tiene forma 'YYYY-MM'.
+   * @param {string} mes
+   * @returns {boolean}
+   */
+  function esMesValido(mes) {
+    return typeof mes === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes);
+  }
+
+  /**
+   * leerHistorialManual(cfg): devuelve SIEMPRE un array saneado de meses
+   * manuales. Tolera cfg sin la clave, descarta entradas sin 'mes' valido
+   * ('YYYY-MM'), numeriza montos y deduplica por mes quedandose con la
+   * ULTIMA aparicion. Es puro: no muta cfg.
+   * @param {Object} [cfg]
+   * @returns {Array<Object>}
+   */
+  function leerHistorialManual(cfg) {
+    cfg = cfg || {};
+    var lista = Array.isArray(cfg.historialManual) ? cfg.historialManual : [];
+    var porMes = {};
+    var orden = [];
+    for (var i = 0; i < lista.length; i++) {
+      var e = lista[i];
+      if (!e || !esMesValido(e.mes)) {
+        continue;
+      }
+      var saneada = {
+        mes: e.mes,
+        cobrado: Number(e.cobrado) || 0
+      };
+      if (e.gastos !== undefined && e.gastos !== null && e.gastos !== "") {
+        saneada.gastos = Number(e.gastos) || 0;
+      }
+      if (
+        e.totalCarlos !== undefined &&
+        e.totalCarlos !== null &&
+        e.totalCarlos !== ""
+      ) {
+        saneada.totalCarlos = Number(e.totalCarlos) || 0;
+      }
+      if (
+        e.totalOctavio !== undefined &&
+        e.totalOctavio !== null &&
+        e.totalOctavio !== ""
+      ) {
+        saneada.totalOctavio = Number(e.totalOctavio) || 0;
+      }
+      if (e.nota !== undefined && e.nota !== null) {
+        saneada.nota = String(e.nota);
+      }
+      if (porMes[e.mes] === undefined) {
+        orden.push(e.mes);
+      }
+      porMes[e.mes] = saneada;
+    }
+    var out = [];
+    for (var j = 0; j < orden.length; j++) {
+      out.push(porMes[orden[j]]);
+    }
+    return out;
+  }
+
+  /**
+   * guardarMesManual(cfg, entrada): devuelve un NUEVO objeto cfg con la
+   * entrada manual agregada o REEMPLAZADA por 'mes'. PURO: no muta el cfg
+   * recibido ni su arreglo historialManual. Si 'entrada.mes' no es valido,
+   * devuelve una copia del cfg sin cambios en el historial.
+   * @param {Object} cfg
+   * @param {Object} entrada { mes, cobrado, gastos?, totalCarlos?, totalOctavio?, nota? }
+   * @returns {Object} nuevo cfg
+   */
+  function guardarMesManual(cfg, entrada) {
+    cfg = cfg || {};
+    var base = leerHistorialManual(cfg);
+    var nuevoCfg = {};
+    for (var k in cfg) {
+      if (Object.prototype.hasOwnProperty.call(cfg, k)) {
+        nuevoCfg[k] = cfg[k];
+      }
+    }
+    if (!entrada || !esMesValido(entrada.mes)) {
+      nuevoCfg.historialManual = base;
+      return nuevoCfg;
+    }
+    var reemplazo = {};
+    for (var p in entrada) {
+      if (Object.prototype.hasOwnProperty.call(entrada, p)) {
+        reemplazo[p] = entrada[p];
+      }
+    }
+    var lista = [];
+    var reemplazado = false;
+    for (var i = 0; i < base.length; i++) {
+      if (base[i].mes === entrada.mes) {
+        lista.push(reemplazo);
+        reemplazado = true;
+      } else {
+        lista.push(base[i]);
+      }
+    }
+    if (!reemplazado) {
+      lista.push(reemplazo);
+    }
+    // Normalizar/sanear la lista resultante.
+    nuevoCfg.historialManual = leerHistorialManual({ historialManual: lista });
+    return nuevoCfg;
+  }
+
+  /**
+   * eliminarMesManual(cfg, mes): devuelve un NUEVO cfg sin el mes manual
+   * indicado. PURO: no muta el cfg recibido.
+   * @param {Object} cfg
+   * @param {string} mes 'YYYY-MM'
+   * @returns {Object} nuevo cfg
+   */
+  function eliminarMesManual(cfg, mes) {
+    cfg = cfg || {};
+    var base = leerHistorialManual(cfg);
+    var nuevoCfg = {};
+    for (var k in cfg) {
+      if (Object.prototype.hasOwnProperty.call(cfg, k)) {
+        nuevoCfg[k] = cfg[k];
+      }
+    }
+    var lista = [];
+    for (var i = 0; i < base.length; i++) {
+      if (base[i].mes !== mes) {
+        lista.push(base[i]);
+      }
+    }
+    nuevoCfg.historialManual = lista;
+    return nuevoCfg;
+  }
+
+  /**
+   * resumenDesdeManual(entrada, clientes, cfg): construye un resumen con la
+   * misma forma que resumenMensual pero a partir de una captura manual.
+   * fuente:'manual'. pagaron/noPagaron NO aplican (null). Es puro.
+   * @param {Object} entrada entrada ya saneada de historialManual
+   * @param {Array<Object>} clientes
+   * @param {Object} cfg
+   * @returns {Object} resumen con fuente:'manual'
+   */
+  function resumenDesdeManual(entrada, clientes, cfg) {
+    clientes = Array.isArray(clientes) ? clientes : [];
+    var ref = aFecha(entrada.mes + "-01");
+    var cobrado = Number(entrada.cobrado) || 0;
+    var gastosDesglose = gastosFijosDelMes(ref, cfg);
+    var gastos =
+      entrada.gastos !== undefined ? Number(entrada.gastos) || 0 : gastosDesglose.total;
+    var gananciaRepartir = cobrado - gastos;
+    var mitad = gananciaRepartir / 2;
+    var totalCarlos =
+      entrada.totalCarlos !== undefined ? Number(entrada.totalCarlos) || 0 : mitad;
+    var totalOctavio =
+      entrada.totalOctavio !== undefined ? Number(entrada.totalOctavio) || 0 : mitad;
+    var facturado = facturacionTotalMensual(clientes);
+    var porcentaje = facturado > 0 ? cobrado / facturado : 0;
+    return {
+      mes: entrada.mes,
+      fecha: ref,
+      cobrado: cobrado,
+      facturado: facturado,
+      porcentajeCobranza: porcentaje,
+      gastosFijos: gastos,
+      starlink: gastosDesglose.starlink,
+      luz: gastosDesglose.luz,
+      luzAplica: luzAplicaEnMes(ref, cfg),
+      gananciaRepartir: gananciaRepartir,
+      totalCarlos: totalCarlos,
+      totalOctavio: totalOctavio,
+      pagaron: null,
+      noPagaron: null,
+      nota: entrada.nota || "",
+      fuente: "manual"
+    };
+  }
+
+  /**
+   * hayPagoRealEnMes(mes, movimientos): true si existe algun pago (esPago)
+   * cuyo periodo/fecha caiga en 'mes' ('YYYY-MM'). Puro.
+   * @param {string} mes
+   * @param {Array<Object>} movimientos
+   * @returns {boolean}
+   */
+  function hayPagoRealEnMes(mes, movimientos) {
+    movimientos = Array.isArray(movimientos) ? movimientos : [];
+    for (var i = 0; i < movimientos.length; i++) {
+      var mov = movimientos[i];
+      if (!mov || !mov.esPago) {
+        continue;
+      }
+      var mesMov = mov.periodo ? String(mov.periodo) : mesDe(mov.fecha);
+      if (mesMov === mes) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * construirHistorial(mesesAtras, clientes, movimientos, cfg, hoy):
+   * array ordenado de resumenes de mes del MAS RECIENTE al MAS ANTIGUO,
+   * FUSIONANDO real + manual con PRECEDENCIA real-sobre-manual:
+   *
+   *   - Si un mes tiene pagos reales (cobrado>0 o algun esPago de ese mes)
+   *     se usa el resumen REAL (fuente:'real').
+   *   - Si NO hay pagos reales pero existe captura en historialManual, se
+   *     construye el resumen desde el manual (fuente:'manual').
+   *
+   * Rango: 'mesesAtras' meses contando hacia atras desde el mes de 'hoy'
+   * (default 12), incluyendo ademas cualquier mes manual anterior al rango
+   * para no perder capturas viejas. Es puro.
+   *
+   * @param {number} [mesesAtras] default 12
+   * @param {Array<Object>} clientes
+   * @param {Array<Object>} movimientos
+   * @param {Object} [cfg]
+   * @param {Date|string|number} [hoy] default new Date()
+   * @returns {Array<Object>}
+   */
+  function construirHistorial(mesesAtras, clientes, movimientos, cfg, hoy) {
+    cfg = cfg || cargarConfig();
+    clientes = Array.isArray(clientes) ? clientes : [];
+    movimientos = Array.isArray(movimientos) ? movimientos : [];
+    var n = Number(mesesAtras);
+    if (!isFinite(n) || n <= 0) {
+      n = 12;
+    }
+    var refHoy = aFecha(hoy) || new Date();
+    var manual = leerHistorialManual(cfg);
+    var manualPorMes = {};
+    for (var m = 0; m < manual.length; m++) {
+      manualPorMes[manual[m].mes] = manual[m];
+    }
+
+    // Conjunto ordenado de meses a incluir: el rango [hoy-n+1 .. hoy] mas
+    // cualquier mes manual (incluso anterior al rango).
+    var mesesSet = {};
+    var listaMeses = [];
+    function agregarMes(mes) {
+      if (mes && mesesSet[mes] === undefined) {
+        mesesSet[mes] = true;
+        listaMeses.push(mes);
+      }
+    }
+    for (var i = 0; i < n; i++) {
+      agregarMes(mesDe(sumarMeses(refHoy, -i)));
+    }
+    for (var j = 0; j < manual.length; j++) {
+      agregarMes(manual[j].mes);
+    }
+
+    var out = [];
+    for (var k = 0; k < listaMeses.length; k++) {
+      var mes = listaMeses[k];
+      var fechaMes = aFecha(mes + "-01");
+      var tieneReal = hayPagoRealEnMes(mes, movimientos);
+      if (tieneReal) {
+        out.push(resumenMensual(fechaMes, clientes, movimientos, cfg));
+      } else if (manualPorMes[mes]) {
+        out.push(resumenDesdeManual(manualPorMes[mes], clientes, cfg));
+      } else {
+        // Mes del rango sin datos reales ni manuales: resumen real en $0.
+        out.push(resumenMensual(fechaMes, clientes, movimientos, cfg));
+      }
+    }
+
+    // Ordenar del mas reciente al mas antiguo por 'mes' ('YYYY-MM').
+    out.sort(function (a, b) {
+      if (a.mes < b.mes) {
+        return 1;
+      }
+      if (a.mes > b.mes) {
+        return -1;
+      }
+      return 0;
+    });
+    return out;
+  }
+
+  /* ----------------------------------------------------------
      6.c Registrar y REVERTIR un pago (logica pura, testeable)
      ------------------------------------------------------------
      El boton "Pagar" de la UI puede pulsarse por error. Para poder
@@ -1601,6 +1959,13 @@
     luzAplicaEnMes: luzAplicaEnMes,
     gastosFijosDelMes: gastosFijosDelMes,
     calcularReparto: calcularReparto,
+
+    // Historial de meses (logica pura; la UI la consume en FEAT-002)
+    resumenMensual: resumenMensual,
+    construirHistorial: construirHistorial,
+    leerHistorialManual: leerHistorialManual,
+    guardarMesManual: guardarMesManual,
+    eliminarMesManual: eliminarMesManual,
 
     // Registrar / revertir pagos
     construirMovimientoPago: construirMovimientoPago,
