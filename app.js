@@ -1743,7 +1743,9 @@
      Lista REAL confirmada por el usuario (tabla + diagrama de red).
      Reemplaza por completo al dataset ficticio anterior.
      Fechas en ISO 'YYYY-MM-DD' (convertidas desde dd/mm/aaaa).
-     diaPago = dia del mes de la fecha de instalacion.
+     diaPago = dia del mes en que vence el pago del cliente (columna
+     "DIAS POR PAGAR" del Excel del usuario). NO es el dia de la fecha de
+     instalacion: p.ej. 'casa 44 LIZBETH' se instalo el 12 pero paga el 15.
      Todos los clientes quedan 'Activo'. Instalacion $0 en todos.
 
      Decisiones de negocio (NO inventar datos que alteren el reparto):
@@ -1767,27 +1769,27 @@
         socio?, ip?, tipoConexion?, apId? }
      ---------------------------------------------------------- */
   var SEED_RAW = [
-    { nombre: "VECINA YOLANDA CASA 15", celular: "", megas: "10 MB", instalacion: "2026-05-05", monto: 500, estatusPago: "pagado" },
-    { nombre: "Hermelinda", celular: "9841311983", megas: "10 MB", instalacion: "2024-07-05", monto: 500, estatusPago: "pagado" },
-    { nombre: "MICAELA HERNANDEZ CASA 54", celular: "9671949286", megas: "10 MB", instalacion: "2026-02-07", monto: 500, estatusPago: "pagado" },
+    { nombre: "VECINA YOLANDA CASA 15", celular: "", megas: "10 MB", instalacion: "2026-05-05", diaPago: 5, monto: 500, estatusPago: "pagado" },
+    { nombre: "Hermelinda", celular: "9841311983", megas: "10 MB", instalacion: "2024-07-05", diaPago: 7, monto: 500, estatusPago: "pagado" },
+    { nombre: "MICAELA HERNANDEZ CASA 54", celular: "9671949286", megas: "10 MB", instalacion: "2026-02-07", diaPago: 8, monto: 500, estatusPago: "pagado" },
     // casa 44 LIZBETH: unico cliente de socio 'Octavio'. IP .145 por el enlace
     // PtP CASA 44. PENDIENTE CONFIRMAR si la .145 corresponde a Lizbeth o a
     // 'Daniel casa 44'; por nombre del diagrama ('CASA 44') se asigna aqui.
-    { nombre: "casa 44 LIZBETH", celular: "9842704365", megas: "10 MB", instalacion: "2025-11-12", monto: 500, estatusPago: "pagado", socio: "Octavio", ip: "192.168.10.145", tipoConexion: "PtP", apId: RED_IDS.PTP_CASA_44 },
-    { nombre: "Daniel casa 44", celular: "9842086116", megas: "10 MB", instalacion: "2025-04-16", monto: 500, estatusPago: "pagado" },
-    { nombre: "Nieto", celular: "9848062139", megas: "20 MB", instalacion: "2024-07-17", monto: 600, estatusPago: "debe", ip: "192.168.10.38", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
-    { nombre: "Lupita casa 26 alado de nieto", celular: "9982047915", megas: "20 MB", instalacion: "2025-03-21", monto: 700, estatusPago: "debe", ip: "192.168.10.111", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
-    { nombre: "Gabriela", celular: "9844491677", megas: "15 MB", instalacion: "2024-09-21", monto: 600, estatusPago: "pagado" },
-    { nombre: "URIEL", celular: "9841913321", megas: "10 MB", instalacion: "2025-12-25", monto: 500, estatusPago: "debe" },
-    { nombre: "Reyes vecino", celular: "9841163234", megas: "30 MB", instalacion: "2024-04-27", monto: 600, estatusPago: "debe", ip: "192.168.10.34", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC1 },
-    { nombre: "TIENDA INDOMABLE", celular: "9841163234", megas: "5 MB", instalacion: "2025-03-24", monto: 500, estatusPago: "debe", ip: "192.168.10.129", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
-    { nombre: "Mercedez RH", celular: "2711657112", megas: "10 MB", instalacion: "2024-04-28", monto: 400, estatusPago: "debe", ip: "192.168.10.36", tipoConexion: "PtP", apId: RED_IDS.PTP_MERCEDES_RH },
-    { nombre: "Berenice", celular: "9841417166", megas: "10 MB", instalacion: "2024-10-30", monto: 500, estatusPago: "debe", ip: "192.168.10.31", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC2 },
-    { nombre: "Jessy casa 43", celular: "", megas: "5 MB", instalacion: "2025-02-24", monto: 500, estatusPago: "debe", ip: "192.168.10.40", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC1 },
-    { nombre: "Obed", celular: "9841564118", megas: "10 MB", instalacion: "2024-07-27", monto: 500, estatusPago: "debe" },
-    { nombre: "VECINO DE BRANDON", celular: "", megas: "10 MB", instalacion: "2026-03-28", monto: 500, estatusPago: "debe" },
-    { nombre: "CASA 17 CARMEN LAVANDERIA", celular: "9841003920", megas: "10 MB", instalacion: "2026-09-16", monto: 500, estatusPago: "debe" },
-    { nombre: "PERRUCHA", celular: "9842046584", megas: "5 MB", instalacion: "2026-10-22", monto: 500, estatusPago: "pagado" }
+    { nombre: "casa 44 LIZBETH", celular: "9842704365", megas: "10 MB", instalacion: "2025-11-12", diaPago: 15, monto: 500, estatusPago: "pagado", socio: "Octavio", ip: "192.168.10.145", tipoConexion: "PtP", apId: RED_IDS.PTP_CASA_44 },
+    { nombre: "Daniel casa 44", celular: "9842086116", megas: "10 MB", instalacion: "2025-04-16", diaPago: 17, monto: 500, estatusPago: "pagado" },
+    { nombre: "Nieto", celular: "9848062139", megas: "20 MB", instalacion: "2024-07-17", diaPago: 17, monto: 600, estatusPago: "debe", ip: "192.168.10.38", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
+    { nombre: "Lupita casa 26 alado de nieto", celular: "9982047915", megas: "20 MB", instalacion: "2025-03-21", diaPago: 21, monto: 700, estatusPago: "debe", ip: "192.168.10.111", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
+    { nombre: "Gabriela", celular: "9844491677", megas: "15 MB", instalacion: "2024-09-21", diaPago: 22, monto: 600, estatusPago: "pagado" },
+    { nombre: "URIEL", celular: "9841913321", megas: "10 MB", instalacion: "2025-12-25", diaPago: 25, monto: 500, estatusPago: "debe" },
+    { nombre: "Reyes vecino", celular: "9841163234", megas: "30 MB", instalacion: "2024-04-27", diaPago: 28, monto: 600, estatusPago: "debe", ip: "192.168.10.34", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC1 },
+    { nombre: "TIENDA INDOMABLE", celular: "9841163234", megas: "5 MB", instalacion: "2025-03-24", diaPago: 28, monto: 500, estatusPago: "debe", ip: "192.168.10.129", tipoConexion: "AP", apId: RED_IDS.AP_OCTARED_3 },
+    { nombre: "Mercedez RH", celular: "2711657112", megas: "10 MB", instalacion: "2024-04-28", diaPago: 29, monto: 400, estatusPago: "debe", ip: "192.168.10.36", tipoConexion: "PtP", apId: RED_IDS.PTP_MERCEDES_RH },
+    { nombre: "Berenice", celular: "9841417166", megas: "10 MB", instalacion: "2024-10-30", diaPago: 30, monto: 500, estatusPago: "debe", ip: "192.168.10.31", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC2 },
+    { nombre: "Jessy casa 43", celular: "", megas: "5 MB", instalacion: "2025-02-24", diaPago: 30, monto: 500, estatusPago: "debe", ip: "192.168.10.40", tipoConexion: "AP", apId: RED_IDS.LITEAP_AC1 },
+    { nombre: "Obed", celular: "9841564118", megas: "10 MB", instalacion: "2024-07-27", diaPago: 30, monto: 500, estatusPago: "debe" },
+    { nombre: "VECINO DE BRANDON", celular: "", megas: "10 MB", instalacion: "2026-03-28", diaPago: 30, monto: 500, estatusPago: "debe" },
+    { nombre: "CASA 17 CARMEN LAVANDERIA", celular: "9841003920", megas: "10 MB", instalacion: "2026-09-16", diaPago: 16, monto: 500, estatusPago: "debe" },
+    { nombre: "PERRUCHA", celular: "9842046584", megas: "5 MB", instalacion: "2026-10-22", diaPago: 30, monto: 500, estatusPago: "pagado" }
   ];
 
   /**
@@ -1809,7 +1811,9 @@
         megas: fila.megas,
         monto: fila.monto,
         fechaInstalacion: fila.instalacion,
-        // diaPago se deriva de la fecha de instalacion en crearCliente.
+        // diaPago explicito de la fila (columna "DIAS POR PAGAR"); crearCliente
+        // lo respeta y NO cae al dia de la fecha de instalacion.
+        diaPago: fila.diaPago,
         tipoPago: "Directo", // default financiero para todos (ver nota del SEED)
         estatus: "Activo",   // todos Activos por ahora
         socio: fila.socio    // undefined -> 'Carlos' por default
