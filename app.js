@@ -1120,6 +1120,17 @@
    * resumenDesdeManual(entrada, clientes, cfg): construye un resumen con la
    * misma forma que resumenMensual pero a partir de una captura manual.
    * fuente:'manual'. pagaron/noPagaron NO aplican (null). Es puro.
+   *
+   * NOTA DE DISEÑO (reparto por socio en capturas manuales): cuando la
+   * captura NO trae totalCarlos/totalOctavio se reparte la ganancia 50/50
+   * (mitad para cada socio), A PROPOSITO. La formula asimetrica del resto de
+   * la app (Octavio = su mitad menos sus pagos directos) necesita el detalle
+   * de pagos por cliente de ese mes, dato que una captura manual de un mes
+   * viejo (p.ej. tomada del Excel) no incluye. Sin ese desglose, 50/50 es el
+   * unico reparto defendible. El modal 'Agregar mes historico' permite
+   * sobreescribir ambos totales a mano cuando se conocen. Esto solo afecta a
+   * meses capturados a mano; los meses reales siguen usando calcularReparto.
+   *
    * @param {Object} entrada entrada ya saneada de historialManual
    * @param {Array<Object>} clientes
    * @param {Object} cfg
@@ -1133,6 +1144,8 @@
     var gastos =
       entrada.gastos !== undefined ? Number(entrada.gastos) || 0 : gastosDesglose.total;
     var gananciaRepartir = cobrado - gastos;
+    // Reparto 50/50 por defecto (ver NOTA DE DISEÑO del encabezado): sin
+    // desglose por cliente no se puede aplicar la formula asimetrica.
     var mitad = gananciaRepartir / 2;
     var totalCarlos =
       entrada.totalCarlos !== undefined ? Number(entrada.totalCarlos) || 0 : mitad;
@@ -1161,8 +1174,19 @@
   }
 
   /**
-   * hayPagoRealEnMes(mes, movimientos): true si existe algun pago (esPago)
-   * cuyo periodo/fecha caiga en 'mes' ('YYYY-MM'). Puro.
+   * hayPagoRealEnMes(mes, movimientos): true si existe algun pago cobrado
+   * (ingreso con esPago) cuya FECHA caiga en 'mes' ('YYYY-MM'). Puro.
+   *
+   * IMPORTANTE: clasifica por el mes de 'mov.fecha', NO por 'mov.periodo'.
+   * Esto mantiene el mismo criterio de mes que calcularReparto/resumenMensual
+   * (que agregan el Cobrado por 'fecha' y nunca miran 'periodo'). Asi la
+   * decision real-vs-manual y el monto Cobrado siempre hablan del mismo mes:
+   * un pago tardio (periodo de un mes, fecha de otro) ya no marca "real" en
+   * $0 el mes del periodo pisando una captura manual; el Cobrado se atribuye
+   * al mes de la fecha, igual que en el panel Reparto. Tambien se exige
+   * mov.tipo === 'ingreso' para alinear el universo de movimientos con
+   * calcularReparto.
+   *
    * @param {string} mes
    * @param {Array<Object>} movimientos
    * @returns {boolean}
@@ -1171,11 +1195,10 @@
     movimientos = Array.isArray(movimientos) ? movimientos : [];
     for (var i = 0; i < movimientos.length; i++) {
       var mov = movimientos[i];
-      if (!mov || !mov.esPago) {
+      if (!mov || mov.tipo !== "ingreso" || !mov.esPago) {
         continue;
       }
-      var mesMov = mov.periodo ? String(mov.periodo) : mesDe(mov.fecha);
-      if (mesMov === mes) {
+      if (mesDe(mov.fecha) === mes) {
         return true;
       }
     }

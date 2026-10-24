@@ -296,8 +296,8 @@ La app incluye una vista **Historial de meses** que resume **mes a mes** cómo l
 
 El historial se construye **solo** a partir de los **pagos registrados** (movimientos con `esPago`):
 
-- Cada pago se asigna a su mes por su **periodo** `YYYY-MM`; para **pagos viejos sin periodo**, se usa el **mes de su fecha**. Es el mismo criterio que ya emplea el resto de la app.
-- **Cobrado** usa exactamente la **misma lógica que el Reparto** (`calcularReparto`), de modo que las cifras **cuadran** con el panel [Reparto de fin de mes](#reparto-de-fin-de-mes-entre-socios).
+- Cada pago se asigna a su mes por la **fecha** del movimiento (`YYYY-MM` de `fecha`). Es **el mismo criterio** que usa el Reparto para sumar lo cobrado, así que un **pago tardío** (registrado con fecha de un mes pero periodo de otro) cuenta en el **mes de su fecha**, igual que en el panel Reparto, y no "pisa" ninguna captura manual del mes de su periodo.
+- **Cobrado** usa exactamente la **misma lógica que el Reparto** (`calcularReparto`), de modo que las cifras **cuadran** con el panel [Reparto de fin de mes](#reparto-de-fin-de-mes-entre-socios). La decisión de si un mes es "real" o "manual" se toma con **ese mismo mes de la fecha**, para que la elección de fuente y el monto Cobrado siempre hablen del mismo mes.
 - **Gastos** y el reparto **Carlos / Octavio** salen de las **mismas funciones del núcleo** (`gastosFijosDelMes`, `luzAplicaEnMes` y `calcularReparto`), **sin cambiar** la fórmula del reparto ya corregida. El historial solo **lee** y presenta esos cálculos; no inventa fórmulas nuevas.
 
 > Como se nutre de los datos sincronizados, el historial se **actualiza solo** cuando registras un pago o un gasto (la vista se redibuja al re-renderizar), y los cambios que llegan desde Firebase en otro dispositivo también se reflejan.
@@ -307,7 +307,9 @@ El historial se construye **solo** a partir de los **pagos registrados** (movimi
 Para los meses **anteriores** a usar la app (por ejemplo los totales de agosto o septiembre que tenías en tu Excel), hay un botón **➕ Agregar mes histórico** que abre un modal donde capturas:
 
 - **Mes** (obligatorio) y **Cobrado** (obligatorio).
-- Opcionalmente: **Gastos**, **Total Carlos**, **Total Octavio** y una **nota**. Lo que no captures se deriva de la lógica del núcleo (por ejemplo, los gastos del mes y el reparto a la mitad).
+- Opcionalmente: **Gastos**, **Total Carlos**, **Total Octavio** y una **nota**. Lo que no captures se deriva de la lógica del núcleo (por ejemplo, los gastos del mes).
+
+> **Reparto de un mes capturado a mano:** si dejas vacíos **Total Carlos** y **Total Octavio**, la ganancia de ese mes se divide **50/50** entre los dos socios. Esto es **a propósito**: la fórmula asimétrica de Octavio (su mitad **menos** lo que cobró directo de sus clientes) necesita el **detalle de pagos por cliente** de ese mes, y una captura manual de un mes viejo (p. ej. sacada del Excel) no lo trae. Sin ese desglose, 50/50 es el único reparto defendible; si conoces los totales exactos, **escríbelos a mano** en esos dos campos y la app los respeta. Esto solo afecta a los meses capturados a mano: los meses con pagos reales siempre usan la fórmula asimétrica de `calcularReparto`.
 
 Estas capturas se guardan en **`config.historialManual`** y, como **viajan dentro de la configuración**, se **sincronizan en la nube** (Firestore) igual que el resto de la app, así que aparecen en todos tus dispositivos. Cada mes capturado a mano se marca en la tabla con una etiqueta **"capturado manualmente"** y trae un botón **🗑️ eliminar** para borrarlo cuando quieras (la barra correspondiente en la gráfica también se distingue).
 
