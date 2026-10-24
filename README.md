@@ -111,6 +111,7 @@ Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-
 
 > **¿Por qué parece que "falta dinero"?** No se pierde dinero. La **Facturación total del mes** es el *objetivo* (lo que podrías cobrar) y los **Ingresos** son lo *real* ya cobrado. Al principio del mes, *Ingresos* es bajo porque casi nadie ha pagado todavía; conforme pulsas **Pagar** en cada cliente, *Ingresos* sube. La **diferencia** entre la facturación y lo cobrado es, precisamente, lo que **falta por cobrar** (y la métrica *Por cobrar* te lo muestra). Cuando todos paguen, *Ingresos* se acerca a la facturación total.
 - **Reparto de fin de mes** (panel justo debajo del Resumen): calcula cómo se divide la ganancia del mes entre los dos socios, **Carlos** y **Octavio**. Comparte la navegación de mes del Resumen (usa el mes seleccionado con `‹` / `›`) y se recalcula al cambiar de mes o al registrar un pago o un gasto. Ver [Reparto de fin de mes entre socios](#reparto-de-fin-de-mes-entre-socios).
+- **Historial de meses** (vista opt-in con el botón **📊 Historial** del encabezado): una **tabla por mes** y una **gráfica de barras** (SVG puro) de lo **Cobrado** cada mes. Se arma **automáticamente** desde los pagos registrados y permite **capturar a mano** los totales de meses viejos. Ver [Historial de meses](#historial-de-meses).
 - **Estadísticas**: clientes activos y pausados, y un desplegable con estadísticas del mes (al corriente = pagaron este mes, vencidos = faltan este mes, pagos cobrados, PTP, Directo y ahorro acumulado). *Pagos cobrados este mes* cuenta únicamente los cobros registrados con el botón **Pagar** de una tarjeta de cliente; un ingreso capturado a mano con **Nuevo Ingreso** suma a *Ingresos* pero no a este contador.
 - **Faltan por pagar este mes**: lista los clientes **Activos** que aún no han registrado un pago del **mes en curso**, ordenados por urgencia (lo más atrasado primero), con el total de los que faltan en la cabecera y un aviso configurable de "N días antes".
 
@@ -273,6 +274,63 @@ Total Octavio = su mitad − sus pagos directos
 - **Octavio** recibe su mitad **menos** los pagos directos de los clientes marcados como suyos. El motivo: ese dinero **Octavio ya lo cobró directo** de esos clientes, así que se le descuenta de su parte del reparto para no pagárselo dos veces. Esos pagos ya se habían apartado del total antes de dividir 50/50 (por eso se restan arriba como *Pagos directos a Octavio*).
 
 > **Importante — qué cuenta como "Ingresos del mes" en el reparto:** se basa en los **pagos cobrados de clientes**, es decir, los movimientos registrados con el botón **Pagar** de una tarjeta (`esPago = true`) cuya fecha cae en el mes seleccionado. Esto es coherente con la métrica *Pagos cobrados este mes* de las Estadísticas. Un **ingreso capturado a mano** con **Nuevo Ingreso** suma a la métrica *Ingresos* del Resumen, pero **no** entra en el reparto. Además, un pago solo se atribuye a Octavio si el movimiento quedó asociado a un cliente marcado "Octavio"; el botón **Pagar** guarda esa asociación automáticamente.
+
+## Historial de meses
+
+La app incluye una vista **Historial de meses** que resume **mes a mes** cómo le fue al negocio. Se abre con el botón **📊 Historial** del encabezado; es una vista **opcional (opt-in)**, igual que el [Mapa de red](#mapa-de-red): al pulsarla se alternan los paneles normales por el historial, sin romper el resto de la app (y si estaba abierta la vista Red, se cierra para que nunca queden las dos a la vez).
+
+### Qué muestra
+
+- **Tabla por mes**, una fila por mes, con estas columnas:
+  - **Mes**: el periodo en español (por ejemplo *Octubre 2026*).
+  - **Cobrado**: lo que realmente se cobró ese mes (pagos registrados).
+  - **Facturado**: la facturación **objetivo** del mes (suma de las cuotas de los clientes activos; hoy ~**$9,400**).
+  - **% de cobranza**: `Cobrado ÷ Facturado` en porcentaje (muestra `—` cuando no hay facturado).
+  - **Gastos**: los gastos fijos del mes (Starlink + luz cuando aplica).
+  - **Ganancia a repartir**: lo que queda para dividir entre los socios tras los gastos.
+  - **Total Carlos** y **Total Octavio**: cuánto le tocó a cada socio ese mes.
+  - **Pagaron / No pagaron**: cuántos clientes pagaron el mes y cuántos faltaron.
+- **Gráfica de barras** de lo **Cobrado** por mes, dibujada con **SVG en línea** (sin librerías externas), en orden cronológico ascendente (de izquierda a derecha). Cada barra tiene una altura proporcional al máximo del periodo, muestra el monto encima y el mes abreviado debajo, y respeta el **modo claro/oscuro** mediante variables CSS. En **móvil** el contenedor permite **scroll horizontal** para no deformar las barras.
+
+### Cómo se arma (automático desde los pagos)
+
+El historial se construye **solo** a partir de los **pagos registrados** (movimientos con `esPago`):
+
+- Cada pago se asigna a su mes por su **periodo** `YYYY-MM`; para **pagos viejos sin periodo**, se usa el **mes de su fecha**. Es el mismo criterio que ya emplea el resto de la app.
+- **Cobrado** usa exactamente la **misma lógica que el Reparto** (`calcularReparto`), de modo que las cifras **cuadran** con el panel [Reparto de fin de mes](#reparto-de-fin-de-mes-entre-socios).
+- **Gastos** y el reparto **Carlos / Octavio** salen de las **mismas funciones del núcleo** (`gastosFijosDelMes`, `luzAplicaEnMes` y `calcularReparto`), **sin cambiar** la fórmula del reparto ya corregida. El historial solo **lee** y presenta esos cálculos; no inventa fórmulas nuevas.
+
+> Como se nutre de los datos sincronizados, el historial se **actualiza solo** cuando registras un pago o un gasto (la vista se redibuja al re-renderizar), y los cambios que llegan desde Firebase en otro dispositivo también se reflejan.
+
+### Capturar meses históricos a mano
+
+Para los meses **anteriores** a usar la app (por ejemplo los totales de agosto o septiembre que tenías en tu Excel), hay un botón **➕ Agregar mes histórico** que abre un modal donde capturas:
+
+- **Mes** (obligatorio) y **Cobrado** (obligatorio).
+- Opcionalmente: **Gastos**, **Total Carlos**, **Total Octavio** y una **nota**. Lo que no captures se deriva de la lógica del núcleo (por ejemplo, los gastos del mes y el reparto a la mitad).
+
+Estas capturas se guardan en **`config.historialManual`** y, como **viajan dentro de la configuración**, se **sincronizan en la nube** (Firestore) igual que el resto de la app, así que aparecen en todos tus dispositivos. Cada mes capturado a mano se marca en la tabla con una etiqueta **"capturado manualmente"** y trae un botón **🗑️ eliminar** para borrarlo cuando quieras (la barra correspondiente en la gráfica también se distingue).
+
+### Precedencia: lo real gana sobre lo manual
+
+Cuando un mes tiene **pagos reales**, se usan **siempre** los datos reales. Si un mes **no tiene pagos** pero sí un **registro manual**, se usa el manual y se marca como **"capturado manualmente"**. Dicho de otra forma: **lo real tiene prioridad sobre lo manual**, de modo que en cuanto empieces a registrar pagos de un mes, ese mes deja de mostrar la captura a mano y pasa a reflejar lo realmente cobrado.
+
+### Limitaciones y decisiones de diseño
+
+- **Rango mostrado:** por defecto los **últimos 12 meses** (contando hacia atrás desde el mes actual), **más** cualquier captura manual anterior a ese rango, para no perder meses viejos que hayas registrado a mano.
+- **Facturado y Pagaron / No pagaron de meses pasados** se calculan con el **padrón ACTUAL** de clientes activos (las mismas `facturacionTotalMensual` y `pagoDelMes` recorren la lista de clientes de hoy). Por eso son una **referencia aproximada**, no una **foto histórica** del padrón que tenías ese mes.
+- **Meses sin pagos salen en $0 (es correcto y esperado).** Recién reiniciado el SEED (los **18 clientes reales** y la lista de movimientos **vacía**; ver [Datos precargados](#datos-precargados-los-18-clientes-reales-de-octared)), el historial muestra el **mes actual en $0** porque todavía no hay pagos registrados. No es un error: la tabla y la gráfica se irán llenando conforme pulses **Pagar** en cada cliente.
+
+### Verificación manual del Historial de meses
+
+Como no hay navegador headless en el entorno de pruebas, esta comprobación se hace a mano:
+
+1. **Inicia sesión** (con Google o como invitado).
+2. **Abre la vista** con el botón **📊 Historial** del encabezado y comprueba que aparecen la **tabla por mes** y la **gráfica de barras** (en el SEED recién reiniciado, el mes actual sale en **$0**, que es lo esperado).
+3. **Registra un pago** con **✔️ Pagar** en un cliente y confirma que, al volver al historial, el **mes actual sube** (tanto en la fila de la tabla como en su barra de la gráfica).
+4. **Captura un mes histórico:** pulsa **➕ Agregar mes histórico**, llena **mes** y **cobrado** (y los opcionales si quieres) y guarda; verifica que aparece en la **tabla** y en la **gráfica** marcado como **"capturado manualmente"**. Luego **elimínalo** con **🗑️ eliminar** y confirma que desaparece.
+5. **Precedencia:** registra un pago en el mismo mes que capturaste a mano y confirma que ese mes pasa a mostrar los **datos reales** (ya sin la marca de manual).
+6. Comprueba la vista en **PC** y en **móvil** (en móvil, que la gráfica tenga **scroll horizontal**) y en **modo claro y oscuro**.
 
 ## Datos precargados: los 18 clientes reales de OCTARED
 
