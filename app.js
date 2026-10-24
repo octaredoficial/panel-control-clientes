@@ -335,7 +335,12 @@
         antenas: [{ nombre: "casa 44 LIZBETH", ip: "192.168.10.145" }]
       }
     ],
-    // Modems directos por cable (acceso http://IP:8090). No son clientes de cobro.
+    // Modems directos por cable (acceso http://IP:8090). CADA MODEM ES UN
+    // CLIENTE distinto que falta por ligar (no es infraestructura compartida).
+    // Estas IPs se muestran en el mapa como "huecos por ligar": el usuario
+    // elige a cual de sus clientes pendientes asignarle cada una. En cuanto un
+    // cliente queda con tipoConexion 'Modem' + esa IP, su hueco desaparece y
+    // el cliente aparece con su nombre en la seccion de modems.
     modems: ["192.168.10.19", "192.168.10.22", "192.168.10.24", "192.168.10.101"],
     // Nodos pendientes por identificar (infraestructura sin cliente asignado).
     pendientes: ["192.168.10.61", "192.168.10.18"]

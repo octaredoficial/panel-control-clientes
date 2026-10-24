@@ -393,7 +393,7 @@ El mapa usa un diseño de **listas apiladas** (de arriba a abajo), no columnas s
 - **Enlaces Punto a Punto (PtP)**, en **teal**, cada punta con su cliente dedicado como fila:
   - **PtP MERCEDES RH** (punta `192.168.10.25`) -> Mercedez RH `.36`.
   - **PtP CASA 44** (punta `192.168.10.15`) -> casa 44 LIZBETH `.145`.
-- **Clientes directos por cable (modem)** (`.19`, `.22`, `.24`, `.101`), que abren en `http://IP:8090`.
+- **Clientes directos por cable (modem)**: **cada modem es un cliente distinto** (no infraestructura compartida). Esta sección lista, con **nombre + IP**, a tus clientes cuyo **Tipo de conexión** es **Modem** y ya tienen IP (abren en `http://IP:8090`), más los **"huecos por ligar"**: las IPs de modem conocidas (`.19`, `.22`, `.24`, `.101`) que **aún no tienen un cliente asignado**. Cada hueco trae un botón para ligarle uno de tus clientes pendientes (ver [Asignar/ligar clientes desde el mapa](#asignarligar-clientes-desde-el-mapa)). En cuanto un cliente queda como Modem con esa IP, su hueco desaparece y el cliente aparece con su nombre.
 - **Pendientes / Falta identificar** (en **naranja**): nodos de infraestructura pendientes (`.61` TP-LINK, `.18`) y los clientes que aún no tienen IP.
 - **En tu lista de cobro, SIN IP aún:** lista informativa con los nombres de los clientes sin IP.
 
@@ -414,10 +414,23 @@ Cada AP/enlace trae en la **topología** una lista de **antenas fijas** (nombre 
 
 El mapa **no es una imagen fija**: sus nodos de cliente se **derivan de los 18 clientes reales** cargados en la app. La clasificación es:
 
-- Cliente **con IP** (y su AP/enlace asignado): aparece como nodo **identificado** (**verde**) colgando de su AP o enlace.
-- Cliente **sin IP**: aparece en la zona de **pendientes** (**naranja**) como "falta identificar".
+- Cliente con **Tipo de conexión "Modem"** e **IP**: aparece en la sección **Clientes directos por cable (modem)** con su **nombre + IP**. Los modems son **directos al router**, así que **no necesitan AP/enlace** (su campo *AP / enlace* puede quedar vacío). Este es el caso de **PERRUCHA** (`192.168.10.13`): en cuanto se marca como Modem con su IP, **sube a la sección de modems** en lugar de quedarse abajo en "falta identificar".
+- Cliente **con IP** y su **AP o enlace PtP** asignado: aparece como nodo **identificado** (**verde**) colgando de ese AP o enlace.
+- Cliente **sin IP** (o con IP pero **sin AP/enlace reconocible** cuando no es modem): aparece en la zona de **pendientes** (**naranja**) como "falta identificar".
 
-Como se nutre de los datos sincronizados, el mapa se **actualiza solo** cuando cambian los clientes (incluyendo los cambios que llegan desde Firebase en otro dispositivo). En el conjunto actual quedan **8 clientes identificados** (los que ya traen IP) y **10 pendientes**.
+Como se nutre de los datos sincronizados, el mapa se **actualiza solo** cuando cambian los clientes (incluyendo los cambios que llegan desde Firebase en otro dispositivo). En el conjunto inicial de los 18 reales quedan **8 clientes identificados** (los que ya traen IP y AP/enlace) y **10 pendientes** (ninguno es modem todavía, hasta que empieces a ligarlos).
+
+### Asignar/ligar clientes desde el mapa
+
+No hace falta entrar a la ficha de cada cliente para ubicarlo en la red: el propio mapa trae un botón **➕ Asignar cliente** en **cada AP**, **cada enlace PtP** y en la **sección de modems** (tanto en su cabecera como en cada hueco "por ligar").
+
+Al pulsarlo se abre un **selector** con la **lista de tus clientes pendientes** (los que aún faltan por identificar). Eliges uno, **capturas su IP** (si ligaste un hueco de modem conocido, la IP viene **precargada**) y pulsas **Asignar**. La app entonces:
+
+1. Le pone al cliente esa **IP**, el **Tipo de conexión** según dónde lo ligues (**AP**, **PtP** o **Modem**) y el **AP/enlace** correspondiente (vacío para los modems, que son directos al router).
+2. **Guarda** el cambio con la misma capa de persistencia del resto de la app (`PCC.guardarClientes`), por lo que se **sincroniza a Firestore** y llega a tus otros dispositivos.
+3. **Redibuja el mapa**: el cliente **salta** de "falta identificar" a su sección (bajo su AP/enlace, o a la lista de modems).
+
+La IP se valida mínimamente (debe ser una **IPv4** con formato correcto, p. ej. `192.168.10.13`); si la dejas vacía o mal escrita, el selector te lo avisa y no guarda nada. Si cancelas, no se cambia nada. Como atajo adicional, **Alt+clic** sobre un nodo de cliente sigue abriendo su **ficha completa**.
 
 ### Buscador y colores
 
@@ -439,7 +452,9 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 3. **Abre la vista Red** con el botón **🗺️ Red** (pruébala en **PC** y en **móvil**) y comprueba: que **AP OCTARED3** lista sus **6 antenas**; qué clientes salen **identificados** (en verde) y cuáles **pendientes** (en naranja); y que las líneas **Core -> AP** son **punteadas** (microondas) mientras que **Core -> modem** son **sólidas** (cable).
 4. **Busca por nombre o IP** en el buscador del mapa y verifica que el nodo coincidente se **resalta** y el resto se atenúa.
 5. **Asigna una IP y un AP** a un cliente pendiente desde su ficha (Editar cliente -> IP, Tipo de conexión y AP/enlace) y guarda; al volver al mapa, ese cliente debe pasar de "falta identificar" a **identificado** bajo el AP indicado.
-6. **Sincronización:** en **otro dispositivo** con la sesión abierta, confirma que ese cliente aparece también como identificado, sin recargar.
+6. **Bug de modems (PERRUCHA):** edita un cliente, ponle **Tipo de conexión "Modem"** y una **IP** (por ejemplo `192.168.10.13`) y guarda. Al volver al mapa debe **subir a la sección "Clientes directos por cable (modem)"** con su nombre, **no** quedarse abajo en "falta identificar".
+7. **Asignar desde el mapa:** pulsa **➕ Asignar cliente** en un **AP** (o en un **hueco de modem**), elige un cliente pendiente del selector, escribe su IP y pulsa **Asignar**. El cliente debe **ligarse** y aparecer de inmediato en esa sección (sin abrir la ficha). Prueba también que una IP vacía o inválida **no** guarda y avisa.
+8. **Sincronización:** en **otro dispositivo** con la sesión abierta, confirma que ese cliente aparece también como identificado / como modem, sin recargar.
 
 ## Persistencia (Firestore + espejo local)
 

@@ -10,9 +10,21 @@
        estado + nombre a la izquierda + IP a la derecha).
      - "Enlaces Punto a Punto (PtP)": tarjetas con cabecera teal y su
        cliente dedicado como fila.
-     - "Clientes directos por cable (modem)": filas que abren http://IP:8090.
+     - "Clientes directos por cable (modem)": CADA MODEM ES UN CLIENTE. Lista
+       los clientes con tipoConexion 'Modem' e IP (nombre + IP, abren
+       http://IP:8090) mas los "huecos por ligar" (IPs de modem conocidas en
+       topologia.modems que aun no tienen cliente) con su boton de asignar.
      - "Pendientes / Falta identificar": nodos de infraestructura
        pendientes (.61 TP-LINK, .18) y clientes sin IP (naranja).
+
+   ASIGNAR/LIGAR DESDE EL MAPA:
+     - Cada AP, cada enlace PtP y la seccion de modems traen un boton
+       "➕ Asignar cliente" que abre un mini-modal (patron .modal) con un
+       <select> de los clientes pendientes (clientesSinAsignar) y un input de
+       IP. Al confirmar se setea ip/tipoConexion/apId en el cliente elegido, se
+       guarda con PCC.guardarClientes (firebase-sync lo propaga a Firestore) y
+       se vuelve a dibujar el mapa, por lo que el cliente salta de pendientes
+       a su seccion sin abrir la ficha.
      - "En tu lista de cobro, SIN IP aun": lista informativa de nombres.
 
    CONEXIONES (se dibujan AL FINAL, detras de las tarjetas, en el SVG):
@@ -27,9 +39,9 @@
    bajo su padre y se FUSIONAN por IP con las antenas fijas (sin duplicar).
 
    DISENO para el arnes (sin DOM):
-     - La logica PURA (clasificarClientes y fusionarAntenas) se define y se
-       expone en window.PCC_RED SIN tocar el DOM, aunque no exista
-       'document'. Todo lo que toca el DOM queda tras el guard.
+     - La logica PURA (clasificarClientes, fusionarAntenas, clientesSinAsignar
+       e ipValida) se define y se expone en window.PCC_RED SIN tocar el DOM,
+       aunque no exista 'document'. Todo lo que toca el DOM queda tras el guard.
    Lee window.PCC de forma PEREZOSA (dentro de funciones).
    ============================================================ */
 (function () {
@@ -46,12 +58,24 @@
   /**
    * clasificarClientes: cruza la lista de clientes con la topologia y
    * devuelve, por cada AP/enlace, sus clientes "identificados" (con IP y
-   * apId que apunta a ese padre) y una lista global de "pendientes"
-   * (clientes sin IP o sin apId reconocible). No toca el DOM.
+   * apId que apunta a ese padre), una lista de clientes-MODEM (tipoConexion
+   * 'Modem' con IP, directos al router, sin depender de apId) y una lista
+   * global de "pendientes" (clientes sin IP o sin forma de ubicarlos). No
+   * toca el DOM.
+   *
+   * Reglas de clasificacion (en orden):
+   *   1. tipoConexion === 'Modem' con IP no vacia -> MODEM (los modems son
+   *      clientes directos por cable al router; NO cuelgan de un AP, por lo
+   *      que NO requieren apId). Este es el arreglo del bug (p.ej. Perrucha
+   *      .13 marcada como Modem con IP se queda abajo en "falta identificar").
+   *   2. IP no vacia + apId que apunta a un AP/enlace conocido -> IDENTIFICADO
+   *      bajo ese padre (AP o PtP), como hasta ahora.
+   *   3. Cualquier otro caso -> PENDIENTE (sin IP, o con IP pero sin apId
+   *      reconocible: no sabemos de que AP cuelga).
    *
    * @param {Array<Object>} clientes
    * @param {Object} topologia  window.PCC.TOPOLOGIA
-   * @returns {{ padres: Array, identificados: Array, pendientes: Array, porApId: Object }}
+   * @returns {{ padres: Array, identificados: Array, modems: Array, pendientes: Array, porApId: Object }}
    */
   function clasificarClientes(clientes, topologia) {
     clientes = Array.isArray(clientes) ? clientes : [];
@@ -76,6 +100,7 @@
     });
 
     var identificados = [];
+    var modems = [];
     var pendientes = [];
 
     clientes.forEach(function (c) {
@@ -84,20 +109,79 @@
       }
       var ip = _ip(c.ip);
       var apId = _ip(c.apId);
+      var tipo = _ip(c.tipoConexion);
+
+      // 1) Cliente-modem con IP: va a la seccion de modems (directo al router).
+      if (tipo === "Modem" && ip) {
+        modems.push(c);
+        return;
+      }
+      // 2) Cliente con IP + apId reconocido: bajo su AP/enlace.
       if (ip && apId && porApId[apId]) {
         porApId[apId].clientes.push(c);
         identificados.push(c);
-      } else {
-        pendientes.push(c);
+        return;
       }
+      // 3) Resto: falta identificar.
+      pendientes.push(c);
     });
 
     return {
       padres: padres,
       identificados: identificados,
+      modems: modems,
       pendientes: pendientes,
       porApId: porApId
     };
+  }
+
+  /**
+   * clientesSinAsignar: filtra la lista de clientes dejando solo los que aun
+   * NO estan ubicados en la red y, por tanto, se pueden "ligar" desde el mapa.
+   * Un cliente esta sin asignar si clasificarClientes lo manda a "pendientes"
+   * (sin IP, o con IP pero sin forma de ubicarlo). Logica pura (sin DOM),
+   * reutilizada por el selector de "Asignar cliente".
+   *
+   * @param {Array<Object>} clientes
+   * @param {Object} topologia  window.PCC.TOPOLOGIA
+   * @returns {Array<Object>} clientes pendientes de ligar (ordenados por nombre)
+   */
+  function clientesSinAsignar(clientes, topologia) {
+    var clasif = clasificarClientes(clientes, topologia);
+    return clasif.pendientes.slice().sort(function (a, b) {
+      var na = ((a && a.nombre) || "").toLowerCase();
+      var nb = ((b && b.nombre) || "").toLowerCase();
+      return na < nb ? -1 : na > nb ? 1 : 0;
+    });
+  }
+
+  /**
+   * ipValida: validacion minima de IPv4 (cuatro octetos 0-255). Sirve para el
+   * formulario de "Asignar cliente" sin depender del DOM. Una cadena vacia es
+   * INVALIDA (se exige IP para ligar). Logica pura.
+   *
+   * @param {string} ip
+   * @returns {boolean}
+   */
+  function ipValida(ip) {
+    var s = _ip(ip);
+    if (!s) {
+      return false;
+    }
+    var partes = s.split(".");
+    if (partes.length !== 4) {
+      return false;
+    }
+    for (var i = 0; i < 4; i++) {
+      if (!/^\d{1,3}$/.test(partes[i])) {
+        return false;
+      }
+      var n = Number(partes[i]);
+      if (n < 0 || n > 255) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -176,10 +260,14 @@
     window.PCC_RED = window.PCC_RED || {};
     window.PCC_RED.clasificarClientes = clasificarClientes;
     window.PCC_RED.fusionarAntenas = fusionarAntenas;
+    window.PCC_RED.clientesSinAsignar = clientesSinAsignar;
+    window.PCC_RED.ipValida = ipValida;
   } else if (typeof globalThis !== "undefined") {
     globalThis.PCC_RED = globalThis.PCC_RED || {};
     globalThis.PCC_RED.clasificarClientes = clasificarClientes;
     globalThis.PCC_RED.fusionarAntenas = fusionarAntenas;
+    globalThis.PCC_RED.clientesSinAsignar = clientesSinAsignar;
+    globalThis.PCC_RED.ipValida = ipValida;
   }
 
   /* ----------------------------------------------------------
@@ -237,6 +325,241 @@
     if (window.console && console.info) {
       console.info("Mapa de red: ficha no disponible para", cliente && cliente.nombre);
     }
+  }
+
+  /* ----------------------------------------------------------
+     Asignar/ligar un cliente pendiente desde el mapa
+     ------------------------------------------------------------
+     Un pequeno modal propio del mapa: un <select> con los clientes que
+     faltan por identificar (clientesSinAsignar), un input de IP (con la IP
+     sugerida precargada cuando se liga un "hueco" de modem conocido) y un
+     boton Asignar. Al confirmar se setean ip/tipoConexion/apId en el cliente
+     elegido, se persiste via PCC.guardarClientes (firebase-sync lo propaga a
+     la nube) y se vuelve a dibujar el mapa.
+     ---------------------------------------------------------- */
+
+  // Etiqueta legible del destino segun tipo de conexion.
+  function etiquetaDestino(tipo, nombrePadre) {
+    if (tipo === "Modem") {
+      return "modem directo por cable";
+    }
+    if (tipo === "PtP") {
+      return "enlace PtP " + (nombrePadre || "");
+    }
+    return "AP " + (nombrePadre || "");
+  }
+
+  // Abre el modal de asignacion para un destino concreto.
+  //   destino = { tipo:'AP'|'PtP'|'Modem', apId:string, nombre:string, ipSugerida?:string }
+  function abrirAsignarCliente(destino) {
+    var PCC = obtenerPCC();
+    if (!PCC || typeof PCC.cargarClientes !== "function") {
+      return;
+    }
+    destino = destino || {};
+    var pendientes = (window.PCC_RED && typeof window.PCC_RED.clientesSinAsignar === "function")
+      ? window.PCC_RED.clientesSinAsignar(PCC.cargarClientes(), PCC.TOPOLOGIA)
+      : [];
+
+    var modal = construirModalAsignar(destino, pendientes);
+    document.body.appendChild(modal);
+    // Enfocar el primer control util.
+    var sel = modal.querySelector(".red-asignar__select");
+    if (sel) {
+      sel.focus();
+    }
+  }
+
+  function cerrarModalAsignar() {
+    var m = $("#red-modal-asignar");
+    if (m && m.parentNode) {
+      m.parentNode.removeChild(m);
+    }
+  }
+
+  function construirModalAsignar(destino, pendientes) {
+    var modal = crearEl("div", "modal red-modal-asignar");
+    modal.id = "red-modal-asignar";
+
+    var overlay = crearEl("div", "modal__overlay");
+    overlay.addEventListener("click", cerrarModalAsignar);
+    modal.appendChild(overlay);
+
+    var dialogo = crearEl("div", "modal__dialogo");
+    dialogo.setAttribute("role", "dialog");
+    dialogo.setAttribute("aria-modal", "true");
+    dialogo.setAttribute("aria-label", "Asignar cliente");
+
+    var cab = crearEl("div", "modal__cabecera");
+    cab.appendChild(crearEl("h2", "modal__titulo", "Asignar cliente"));
+    var cerrar = crearEl("button", "btn btn--icono", "✕");
+    cerrar.type = "button";
+    cerrar.setAttribute("aria-label", "Cerrar");
+    cerrar.addEventListener("click", cerrarModalAsignar);
+    cab.appendChild(cerrar);
+    dialogo.appendChild(cab);
+
+    var cuerpo = crearEl("div", "modal__cuerpo");
+    cuerpo.appendChild(crearEl(
+      "p",
+      "campo-ayuda",
+      "Elige un cliente que falta por identificar y captura su IP para ligarlo a: " +
+        etiquetaDestino(destino.tipo, destino.nombre) + "."
+    ));
+
+    if (!pendientes.length) {
+      cuerpo.appendChild(crearEl(
+        "p",
+        "red-vacio",
+        "No hay clientes pendientes por ligar. Todos tus clientes ya tienen IP asignada 🎉"
+      ));
+      var accionesVacio = crearEl("div", "modal__acciones");
+      var cancelarV = crearEl("button", "btn btn--secundario", "Cerrar");
+      cancelarV.type = "button";
+      cancelarV.addEventListener("click", cerrarModalAsignar);
+      accionesVacio.appendChild(cancelarV);
+      cuerpo.appendChild(accionesVacio);
+      dialogo.appendChild(cuerpo);
+      modal.appendChild(dialogo);
+      return modal;
+    }
+
+    // Selector de cliente.
+    var grpCliente = crearEl("div", "campo-grupo");
+    grpCliente.appendChild(crearEl("label", "campo-label", "Cliente pendiente"));
+    var select = crearEl("select", "campo campo--select red-asignar__select");
+    pendientes.forEach(function (c) {
+      var opt = document.createElement("option");
+      opt.value = c.id;
+      var sufijo = (c.ip && String(c.ip).trim()) ? " · IP " + c.ip : "";
+      opt.textContent = (c.nombre || "Cliente") + sufijo;
+      select.appendChild(opt);
+    });
+    grpCliente.appendChild(select);
+    cuerpo.appendChild(grpCliente);
+
+    // Input de IP (precargado con la IP sugerida del hueco, si la hay).
+    var grpIp = crearEl("div", "campo-grupo");
+    grpIp.appendChild(crearEl("label", "campo-label", "IP del cliente"));
+    var inputIp = crearEl("input", "campo red-asignar__ip");
+    inputIp.type = "text";
+    inputIp.placeholder = "192.168.10.x";
+    if (destino.ipSugerida) {
+      inputIp.value = destino.ipSugerida;
+    } else {
+      // Precargar la IP ya capturada en el cliente seleccionado, si la trae.
+      var primero = pendientes[0];
+      if (primero && primero.ip) {
+        inputIp.value = primero.ip;
+      }
+    }
+    grpIp.appendChild(inputIp);
+    var ayudaIp = crearEl("div", "campo-ayuda red-asignar__error");
+    ayudaIp.hidden = true;
+    grpIp.appendChild(ayudaIp);
+    cuerpo.appendChild(grpIp);
+
+    // Al cambiar de cliente, sugerir su IP previa (si no venia un hueco fijo).
+    select.addEventListener("change", function () {
+      if (destino.ipSugerida) {
+        return;
+      }
+      var elegido = pendientes.filter(function (c) {
+        return String(c.id) === String(select.value);
+      })[0];
+      inputIp.value = (elegido && elegido.ip) ? elegido.ip : "";
+    });
+
+    var acciones = crearEl("div", "modal__acciones");
+    var cancelar = crearEl("button", "btn btn--secundario", "Cancelar");
+    cancelar.type = "button";
+    cancelar.addEventListener("click", cerrarModalAsignar);
+    var confirmar = crearEl("button", "btn btn--primario", "Asignar");
+    confirmar.type = "button";
+    confirmar.addEventListener("click", function () {
+      var ip = (inputIp.value || "").trim();
+      var validador = (window.PCC_RED && typeof window.PCC_RED.ipValida === "function")
+        ? window.PCC_RED.ipValida
+        : function (v) { return !!(v && String(v).trim()); };
+      if (!validador(ip)) {
+        ayudaIp.hidden = false;
+        ayudaIp.textContent = "Escribe una IP válida (ej. 192.168.10.13).";
+        inputIp.focus();
+        return;
+      }
+      var ok = ligarCliente(select.value, ip, destino);
+      if (ok) {
+        cerrarModalAsignar();
+      }
+    });
+    acciones.appendChild(cancelar);
+    acciones.appendChild(confirmar);
+    cuerpo.appendChild(acciones);
+
+    dialogo.appendChild(cuerpo);
+    modal.appendChild(dialogo);
+    return modal;
+  }
+
+  /**
+   * ligarCliente: aplica la asignacion al cliente elegido y persiste.
+   * Setea ip + tipoConexion + apId (apId vacio para modem) y guarda via los
+   * SETTERS de PCC (PCC.guardarClientes), que firebase-sync parchea para
+   * espejar a Firestore. Redibuja el mapa al terminar.
+   *
+   * @param {string} clienteId
+   * @param {string} ip
+   * @param {Object} destino { tipo, apId }
+   * @returns {boolean} true si se guardo
+   */
+  function ligarCliente(clienteId, ip, destino) {
+    var PCC = obtenerPCC();
+    if (!PCC || typeof PCC.cargarClientes !== "function" || typeof PCC.guardarClientes !== "function") {
+      return false;
+    }
+    var lista = PCC.cargarClientes();
+    var encontrado = false;
+    var nuevaLista = lista.map(function (c) {
+      if (!c || String(c.id) !== String(clienteId)) {
+        return c;
+      }
+      encontrado = true;
+      var copia = {};
+      for (var k in c) {
+        if (Object.prototype.hasOwnProperty.call(c, k)) {
+          copia[k] = c[k];
+        }
+      }
+      copia.ip = String(ip).trim();
+      copia.tipoConexion = destino.tipo || "";
+      // Los modems son directos al router: no cuelgan de un AP -> apId vacio.
+      copia.apId = destino.tipo === "Modem" ? "" : (destino.apId || "");
+      return copia;
+    });
+    if (!encontrado) {
+      return false;
+    }
+    PCC.guardarClientes(nuevaLista);
+    // Re-render: si existe el render envuelto de la UI lo usa; si no, redibuja
+    // directamente el mapa. guardarClientes de firebase-sync ya propago a la nube.
+    if (PCC.UI && typeof PCC.UI.render === "function") {
+      PCC.UI.render();
+    } else {
+      dibujarMapa();
+    }
+    return true;
+  }
+
+  // Boton "➕ Asignar cliente" reutilizable para cabeceras de seccion/tarjeta.
+  function botonAsignar(destino) {
+    var btn = crearEl("button", "red-asignar-btn", "➕ Asignar cliente");
+    btn.type = "button";
+    btn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      abrirAsignarCliente(destino);
+    });
+    return btn;
   }
 
   // Conectores a dibujar en el SVG. Cada entrada:
@@ -359,7 +682,8 @@
           nombre: padre.nombre,
           ip: padre.ip,
           sub: metaCabecera(meta),
-          filas: fusionarAntenas(meta, padre.clientes)
+          filas: fusionarAntenas(meta, padre.clientes),
+          destino: { tipo: "AP", apId: padre.id, nombre: padre.nombre }
         });
         gridAps.appendChild(tarjeta.el);
         _conectores.push({ desde: tarjetaCore, hasta: tarjeta.cabeceraAncla, tipo: "ap" });
@@ -384,7 +708,8 @@
           nombre: padre.nombre,
           ip: padre.ip,
           sub: "Enlace dedicado",
-          filas: fusionarAntenas(meta, padre.clientes)
+          filas: fusionarAntenas(meta, padre.clientes),
+          destino: { tipo: "PtP", apId: padre.id, nombre: padre.nombre }
         });
         gridPtp.appendChild(tarjeta.el);
         _conectores.push({ desde: tarjetaCore, hasta: tarjeta.cabeceraAncla, tipo: "ptp" });
@@ -395,24 +720,64 @@
       capa.appendChild(gridPtp);
     }
 
-    /* --- Modems de cable --- */
-    var modems = Array.isArray(topologia.modems) ? topologia.modems : [];
-    if (modems.length) {
-      capa.appendChild(tituloSeccion("Clientes directos por cable (modem)"));
-      var tarjetaModem = crearEl("div", "red-tarjeta red-tarjeta--modem");
-      var cabModem = crearEl("div", "red-tarjeta__cabecera red-tarjeta__cabecera--modem");
-      cabModem.appendChild(crearEl("span", "red-tarjeta__nombre", "Modems por cable"));
-      cabModem.appendChild(crearEl("span", "red-tarjeta__ip", "http://IP:8090"));
-      tarjetaModem.appendChild(cabModem);
-      var cuerpoModem = crearEl("div", "red-tarjeta__cuerpo");
-      modems.forEach(function (ip) {
-        var fila = construirFila({ estado: "modem", nombre: "Modem", ip: ip });
-        cuerpoModem.appendChild(fila);
-        _conectores.push({ desde: tarjetaCore, hasta: fila, tipo: "cable" });
+    /* --- Modems de cable (CADA MODEM = UN CLIENTE) ---
+       Los modems son clientes directos por cable al router (no infraestructura
+       compartida). Se listan los CLIENTES con tipoConexion 'Modem' e IP
+       (nombre + IP). Las IPs de topologia.modems se tratan como "huecos"
+       de modems conocidos AUN SIN CLIENTE ligado: se muestran como filas
+       "por ligar" (con su IP sugerida) y NO se duplican si ya hay un cliente
+       con esa IP. */
+    var modemsFijos = Array.isArray(topologia.modems) ? topologia.modems : [];
+    var clientesModem = Array.isArray(clasif.modems) ? clasif.modems : [];
+    capa.appendChild(tituloSeccion("Clientes directos por cable (modem)"));
+    var tarjetaModem = crearEl("div", "red-tarjeta red-tarjeta--modem");
+    var cabModem = crearEl("div", "red-tarjeta__cabecera red-tarjeta__cabecera--modem");
+    var cabModemTxt = crearEl("div", "red-tarjeta__cabtexto");
+    cabModemTxt.appendChild(crearEl("span", "red-tarjeta__nombre", "Modems por cable"));
+    cabModemTxt.appendChild(crearEl("span", "red-tarjeta__sub", "cada modem es un cliente · http://IP:8090"));
+    cabModem.appendChild(cabModemTxt);
+    cabModem.appendChild(botonAsignar({ tipo: "Modem", apId: "", nombre: "" }));
+    tarjetaModem.appendChild(cabModem);
+    var cuerpoModem = crearEl("div", "red-tarjeta__cuerpo");
+
+    // IPs de los clientes-modem ya ligados (para no duplicar los huecos fijos).
+    var ipsConCliente = {};
+    clientesModem.forEach(function (c) {
+      var ip = (c.ip || "").trim();
+      if (ip) {
+        ipsConCliente[ip] = true;
+      }
+      var filaCli = construirFila({
+        estado: "modem",
+        nombre: c.nombre || "Cliente",
+        ip: ip || null,
+        cliente: c
       });
-      tarjetaModem.appendChild(cuerpoModem);
-      capa.appendChild(tarjetaModem);
+      cuerpoModem.appendChild(filaCli);
+      _conectores.push({ desde: tarjetaCore, hasta: filaCli, tipo: "cable" });
+    });
+
+    // Huecos: IPs de modem conocidas sin cliente ligado todavia -> "por ligar".
+    modemsFijos.forEach(function (ip) {
+      if (ipsConCliente[ip]) {
+        return; // ya hay un cliente real con esa IP.
+      }
+      var filaHueco = crearEl("div", "red-fila-item red-fila-item--modem red-fila-item--hueco");
+      filaHueco.appendChild(crearEl("span", "red-fila-item__estado"));
+      filaHueco.appendChild(crearEl("span", "red-fila-item__nombre", "Por ligar"));
+      filaHueco.appendChild(crearEl("span", "red-fila-item__ip", abreviarIp(ip)));
+      var btnHueco = botonAsignar({ tipo: "Modem", apId: "", nombre: "", ipSugerida: ip });
+      btnHueco.classList.add("red-asignar-btn--mini");
+      filaHueco.appendChild(btnHueco);
+      cuerpoModem.appendChild(filaHueco);
+      _conectores.push({ desde: tarjetaCore, hasta: filaHueco, tipo: "cable" });
+    });
+
+    if (!clientesModem.length && !modemsFijos.length) {
+      cuerpoModem.appendChild(crearEl("p", "red-vacio", "Sin modems por ahora"));
     }
+    tarjetaModem.appendChild(cuerpoModem);
+    capa.appendChild(tarjetaModem);
 
     /* --- Pendientes / Falta identificar --- */
     var pendInfra = Array.isArray(topologia.pendientes) ? topologia.pendientes : [];
@@ -516,6 +881,12 @@
     });
     if (!(opts.filas || []).length) {
       cuerpo.appendChild(crearEl("p", "red-vacio", "Sin antenas"));
+    }
+    // Control para ligar un cliente pendiente a este AP/enlace desde el mapa.
+    if (opts.destino) {
+      var pie = crearEl("div", "red-tarjeta__pie");
+      pie.appendChild(botonAsignar(opts.destino));
+      cuerpo.appendChild(pie);
     }
     tarjeta.appendChild(cuerpo);
 

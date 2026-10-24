@@ -1670,6 +1670,75 @@ body {
   opacity: 0.3;
 }
 
+/* ---------------------- Asignar/ligar clientes desde el mapa ---------
+   Boton "➕ Asignar cliente" en cabeceras de modems y pie de cada AP/PtP,
+   y filas "por ligar" (huecos de modem conocidos sin cliente aun). */
+.red-tarjeta__pie {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-top: 1px dashed var(--borde);
+  background: var(--superficie);
+}
+
+.red-asignar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--acento);
+  background: var(--acento-suave);
+  color: var(--acento-fuerte);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.red-asignar-btn:hover {
+  background: var(--acento);
+  color: #fff;
+}
+
+.red-asignar-btn:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+/* En la cabecera de modems (fondo oscuro) el boton va en claro. */
+.red-tarjeta__cabecera--modem .red-asignar-btn {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.red-tarjeta__cabecera--modem .red-asignar-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.red-asignar-btn--mini {
+  font-size: 0.72rem;
+  padding: 3px 9px;
+}
+
+/* Fila "por ligar": hueco de modem conocido sin cliente. */
+.red-fila-item--hueco {
+  cursor: default;
+  opacity: 0.95;
+}
+.red-fila-item--hueco .red-fila-item__nombre {
+  font-style: italic;
+  color: var(--texto-suave);
+}
+
+/* Modal propio del mapa (reutiliza el patron .modal global). */
+.red-modal-asignar .red-asignar__error {
+  color: var(--rojo);
+  margin-top: 4px;
+}
+
 /* ====================================================================
    HISTORIAL DE MESES (vista opt-in, FEAT-002)
    Tabla por mes + grafica de barras SVG inline. Usa las variables de
