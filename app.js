@@ -657,6 +657,32 @@
   }
 
   /**
+   * facturacionTotalMensual(clientes): suma de las cuotas mensuales
+   * (campo 'monto') de los clientes con estatus === 'Activo'. Representa
+   * el POTENCIAL de cobro del mes (lo que entraria si todos los clientes
+   * activos pagaran su cuota), es decir, la facturacion objetivo.
+   *
+   * Es una cifra puramente informativa: NO depende del mes navegado
+   * (monto es una cuota fija mensual) y NO afecta al reparto ni a la
+   * ganancia. Los clientes Pausados NO cuentan (no se les cobra). Un
+   * cliente con monto 0 (p.ej. "en curso") no afecta la suma.
+   *
+   * @param {Array<Object>} clientes
+   * @returns {number} suma de cuotas mensuales de los activos
+   */
+  function facturacionTotalMensual(clientes) {
+    clientes = Array.isArray(clientes) ? clientes : [];
+    var total = 0;
+    for (var i = 0; i < clientes.length; i++) {
+      var c = clientes[i];
+      if (c && c.estatus === "Activo") {
+        total += Number(c.monto) || 0;
+      }
+    }
+    return total;
+  }
+
+  /**
    * calcularReparto(fecha, clientes, movimientos, cfg): calcula el
    * reparto de fin de mes para el mes de 'fecha'.
    *
@@ -1408,6 +1434,9 @@
     diasRestantes: diasRestantes,
     estadoPago: estadoPago,
 
+    // Facturacion objetivo (potencial de cobro mensual)
+    facturacionTotalMensual: facturacionTotalMensual,
+
     // Reparto de fin de mes entre socios
     luzAplicaEnMes: luzAplicaEnMes,
     gastosFijosDelMes: gastosFijosDelMes,
@@ -1661,10 +1690,18 @@
       }
     });
 
+    // Facturacion total del mes: potencial de cobro = suma de cuotas
+    // (monto) de los clientes activos. Es la facturacion OBJETIVO (lo que
+    // entraria si todos pagaran). Es informativa: no cambia por mes y no
+    // afecta el reparto ni la ganancia. La diferencia con "Ingresos"
+    // (lo cobrado real) es lo que todavia falta por cobrar.
+    var facturacion = PCC.facturacionTotalMensual(lista);
+
     setTexto("#metrica-ingresos", PCC.formatoMoneda(ingresos));
     setTexto("#metrica-egresos", PCC.formatoMoneda(egresos));
     setTexto("#metrica-ganancia", PCC.formatoMoneda(ganancia));
     setTexto("#metrica-porcobrar", PCC.formatoMoneda(porCobrar));
+    setTexto("#metrica-facturacion", PCC.formatoMoneda(facturacion));
   }
 
   /* ---------------------- Reparto de fin de mes ------------- */

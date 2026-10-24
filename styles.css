@@ -343,7 +343,7 @@ body {
 
 .metricas {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 
@@ -371,6 +371,13 @@ body {
 .metrica--ingreso .metrica__valor { color: var(--verde); }
 .metrica--egreso .metrica__valor { color: var(--rojo); }
 .metrica--ganancia .metrica__valor { color: var(--acento); }
+.metrica--facturacion .metrica__valor { color: var(--texto); }
+
+.metrica__nota {
+  font-size: 0.72rem;
+  color: var(--texto-suave);
+  line-height: 1.3;
+}
 
 /* ---------------------- Reparto de fin de mes ------------- */
 .reparto__desglose {

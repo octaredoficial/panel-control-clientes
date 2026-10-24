@@ -21,7 +21,8 @@
                 #btn-nuevo-cliente, #btn-tema
       Resumen:  #resumen-titulo, #btn-mes-prev, #btn-mes-next,
                 #metrica-ingresos, #metrica-egresos,
-                #metrica-ganancia, #metrica-porcobrar
+                #metrica-ganancia, #metrica-porcobrar,
+                #metrica-facturacion
       Stats:    #stat-activos, #stat-pausados, (details) #stats-mes
       Pagos:    #pagos-resumen-num, #pagos-resumen-monto,
                 #pagos-badge-aviso, #lista-pagos
@@ -134,6 +135,11 @@
           <article class="metrica metrica--porcobrar">
             <span class="metrica__etiqueta">Por cobrar (hasta fin de mes)</span>
             <span class="metrica__valor" id="metrica-porcobrar">$0.00</span>
+          </article>
+          <article class="metrica metrica--facturacion" title="Facturación objetivo del mes: lo que entraría si todos los clientes activos pagaran su cuota. Es informativo y no afecta el reparto ni la ganancia.">
+            <span class="metrica__etiqueta">Facturación total del mes</span>
+            <span class="metrica__valor" id="metrica-facturacion">$0.00</span>
+            <span class="metrica__nota">si todos los clientes activos pagaran este mes</span>
           </article>
         </div>
       </section>
