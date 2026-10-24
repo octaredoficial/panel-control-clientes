@@ -263,7 +263,7 @@ Total Octavio = su mitad − sus pagos directos
 
 Ya **no** se cargan clientes ficticios de demostración. El conjunto de datos ahora son **exactamente los 18 clientes reales de OCTARED**, tomados de la lista del negocio (que coincide con el diagrama de red). Son estos:
 
-*Cresencia caraos casa P4*, *VECINA YOLANDA CASA 15*, *Hermelinda*, *MICAELA HERNANDEZ CASA 54*, *casa 44 LIZBETH*, *Daniel casa 44*, *Nieto*, *Lupita casa 26 alado de nieto*, *Gabriela*, *URIEL*, *Reyes vecino*, *TIENDA INDOMABLE*, *Mercedez RH*, *Berenice*, *Jessy casa 43*, *Obed*, *VECINO DE BRANDON* y *CASA 17 CARMEN LAVANDERIA*.
+*VECINA YOLANDA CASA 15*, *Hermelinda*, *MICAELA HERNANDEZ CASA 54*, *casa 44 LIZBETH*, *Daniel casa 44*, *Nieto*, *Lupita casa 26 alado de nieto*, *Gabriela*, *URIEL*, *Reyes vecino*, *TIENDA INDOMABLE*, *Mercedez RH*, *Berenice*, *Jessy casa 43*, *Obed*, *VECINO DE BRANDON*, *CASA 17 CARMEN LAVANDERIA* y *PERRUCHA*.
 
 Reglas con las que se cargan:
 
@@ -271,7 +271,8 @@ Reglas con las que se cargan:
 - **El único que paga directamente a Octavio es `casa 44 LIZBETH`** (socio **Octavio**); el resto paga a **Carlos**. Esto es lo que usa el [Reparto de fin de mes](#reparto-de-fin-de-mes-entre-socios).
 - **Instalación en $0** para todos (no se cobra instalación en este alta).
 - **Monto, megas y día de pago** son los reales de cada cliente (por ejemplo, *Nieto* 20 MB $600, *Reyes vecino* 30 MB $600, *Mercedez RH* 10 MB $400). El día de pago se deriva de la fecha de instalación.
-- **Estado de pago realista:** los marcados como "al corriente" o "en curso" quedan con un pago reciente y su próximo vencimiento a futuro; los que "deben" quedan como **Vencido** (vencimiento ya pasado y sin pago del ciclo).
+- **Estado de pago realista:** los marcados como "al corriente" (PAGADO) quedan con un pago reciente y su próximo vencimiento a futuro; los que "deben" (DEBE) quedan como **Vencido** (vencimiento ya pasado y sin pago del ciclo).
+- **Facturación total (objetivo):** la suma de las cuotas mensuales de los 18 clientes activos es **$9,400**.
 
 > **Decisión sobre `tipoPago` (financiero PTP/Directo):** como la lista real no trae este dato, los 18 clientes se cargan con `tipoPago = "Directo"` por defecto. Este campo es solo una **etiqueta financiera informativa** (y alimenta los chips y estadísticas de PTP/Directo); **no altera el reparto entre socios**, que depende únicamente del campo **socio** (Carlos / Octavio). Puedes cambiar el `tipoPago` de cada cliente cuando quieras desde su ficha sin que eso afecte las cuentas del reparto.
 
