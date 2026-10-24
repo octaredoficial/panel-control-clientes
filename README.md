@@ -248,11 +248,11 @@ Ingresos del mes (pagos cobrados)
   ÷ 2  → mitad para cada socio
 
 Total Carlos  = su mitad
-Total Octavio = su mitad + sus pagos directos
+Total Octavio = su mitad − sus pagos directos
 ```
 
 - **Carlos** recibe su mitad de la ganancia a repartir.
-- **Octavio** recibe su mitad **más** los pagos directos de los clientes marcados como suyos (ese dinero se aparta del reparto 50/50 y va completo a Octavio).
+- **Octavio** recibe su mitad **menos** los pagos directos de los clientes marcados como suyos. El motivo: ese dinero **Octavio ya lo cobró directo** de esos clientes, así que se le descuenta de su parte del reparto para no pagárselo dos veces. Esos pagos ya se habían apartado del total antes de dividir 50/50 (por eso se restan arriba como *Pagos directos a Octavio*).
 
 > **Importante — qué cuenta como "Ingresos del mes" en el reparto:** se basa en los **pagos cobrados de clientes**, es decir, los movimientos registrados con el botón **Pagar** de una tarjeta (`esPago = true`) cuya fecha cae en el mes seleccionado. Esto es coherente con la métrica *Pagos cobrados este mes* de las Estadísticas. Un **ingreso capturado a mano** con **Nuevo Ingreso** suma a la métrica *Ingresos* del Resumen, pero **no** entra en el reparto. Además, un pago solo se atribuye a Octavio si el movimiento quedó asociado a un cliente marcado "Octavio"; el botón **Pagar** guarda esa asociación automáticamente.
 

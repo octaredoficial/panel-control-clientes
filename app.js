@@ -591,7 +591,8 @@
      El negocio es de dos socios: Carlos y Octavio. Al cierre de mes
      se reparte la ganancia 50/50, pero antes se descuentan los gastos
      fijos compartidos (Starlink + luz) y se aparta el pago directo de
-     los clientes marcados socio 'Octavio' (ese dinero es 100% suyo).
+     los clientes marcados socio 'Octavio' (ese dinero Octavio YA lo
+     cobro directo, por eso se le descuenta de su parte del reparto).
 
      Formula (confirmada por el usuario):
        ingresosMes  = pagos cobrados (esPago) con fecha en el mes
@@ -600,7 +601,7 @@
        gananciaRepartir = ingresosMes - gastos - pagosOctavio
        mitad        = gananciaRepartir / 2
        totalCarlos  = mitad
-       totalOctavio = mitad + pagosOctavio
+       totalOctavio = mitad - pagosOctavio   (ya los cobro directo)
      ---------------------------------------------------------- */
 
   /**
@@ -724,7 +725,7 @@
       mitadCarlos: mitad,
       mitadOctavio: mitad,
       totalCarlos: mitad,
-      totalOctavio: mitad + pagosOctavio,
+      totalOctavio: mitad - pagosOctavio,
       luzAplica: luzAplicaEnMes(ref, cfg)
     };
   }
