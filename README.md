@@ -89,6 +89,17 @@ Como no hay navegador headless en el entorno de pruebas, esta comprobación se h
 
 > El botón **Avisar** (WhatsApp) **sigue funcionando igual** que antes: abre un enlace `https://wa.me/...` con el mensaje prellenado.
 
+### Pulido final estilo iOS (fuente del sistema, large title y animaciones)
+
+Como toque final la interfaz usa detalles al estilo de iOS, todos con CSS y **sin recursos remotos** (cero Google Fonts, cero CDNs de tipografía):
+
+- **Fuente del sistema de Apple:** el texto usa la pila de fuentes del sistema (`-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif`). En iPhone/Mac se ve con **San Francisco**; en otras plataformas cae a la fuente de sistema correspondiente. No se descarga ninguna fuente.
+- **Large title en el encabezado:** el título *Panel de Control de Clientes* se muestra como un **large title** grande, de peso fuerte y *tracking* ajustado, más prominente aún en móvil. **Decisión de diseño:** el large title es **estático** (no se encoge al hacer scroll). El efecto dinámico exigiría JavaScript que no se puede validar sin navegador en el entorno de pruebas (el render no es verificable aquí), así que se priorizó una jerarquía limpia y robusta que siempre degrada bien. Queda documentado también en un comentario de `styles.css`.
+- **Transiciones y feedback táctil:** botones, chips, tarjetas y la barra inferior tienen transiciones suaves y discretas (≈180 ms) y un leve **`press`** al pulsar (`transform: scale(0.98)` en `:active`).
+- **Reducir movimiento:** si el usuario activa *reducir movimiento* en su sistema, un bloque `@media (prefers-reduced-motion: reduce)` **anula** animaciones y transiciones y neutraliza el `press`, para una experiencia estática y accesible.
+
+Verificación a mano: el texto se ve con la fuente del sistema, el título del encabezado destaca, al pulsar un botón hay un leve encogido, y con *reducir movimiento* activado nada se anima. El bloque de impresión del recibo (`@media print`) **no cambia**.
+
 ### Verificación manual del Historial de pagos y Recibos
 
 Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-y-recibos)), comprueba a mano en el navegador:
