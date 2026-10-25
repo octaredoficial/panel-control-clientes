@@ -3894,6 +3894,77 @@
         cerrarModales();
       }
     });
+
+    engancharMenuAcciones();
+  }
+
+  /* ==========================================================
+     POPOVER '•••' DE ACCIONES SECUNDARIAS POR TARJETA (FEAT-004)
+     ----------------------------------------------------------
+     Las acciones secundarias (Historial, editar, pausar, eliminar,
+     revertir) siguen siendo los MISMOS botones .accion-* dentro del
+     panel .acciones-menu__panel; la delegacion que los ejecuta no
+     cambia (ver el bloque de "Acciones por tarjeta" mas arriba). Aqui
+     solo se controla mostrar/ocultar el panel:
+       - Toggle via delegacion GLOBAL por clase (.acciones-menu__toggle),
+         para que funcione con tarjetas recreadas en cada render sin
+         re-enganchar listeners.
+       - Click fuera cierra cualquier menu abierto.
+       - Escape cierra el menu abierto (sin interferir con modales:
+         solo actua cuando hay un menu abierto).
+     ========================================================== */
+  function cerrarMenusAcciones(excepto) {
+    $all(".acciones-menu__panel").forEach(function (panel) {
+      if (panel === excepto) {
+        return;
+      }
+      if (!panel.hidden) {
+        panel.hidden = true;
+        var menu = panel.closest(".acciones-menu");
+        var toggle = menu ? menu.querySelector(".acciones-menu__toggle") : null;
+        if (toggle) {
+          toggle.setAttribute("aria-expanded", "false");
+        }
+      }
+    });
+  }
+
+  function engancharMenuAcciones() {
+    // Toggle: delegacion global por clase (robusto ante re-render).
+    document.addEventListener("click", function (ev) {
+      var toggle = ev.target.closest
+        ? ev.target.closest(".acciones-menu__toggle")
+        : null;
+      if (toggle) {
+        var menu = toggle.closest(".acciones-menu");
+        var panel = menu ? menu.querySelector(".acciones-menu__panel") : null;
+        if (panel) {
+          var abrir = panel.hidden;
+          // Cerrar los demas antes de abrir/cerrar este.
+          cerrarMenusAcciones(abrir ? panel : null);
+          panel.hidden = !abrir;
+          toggle.setAttribute("aria-expanded", abrir ? "true" : "false");
+        }
+        return;
+      }
+      // Click fuera de cualquier panel/menu: cerrar todo. Si el click cayo
+      // dentro de un .acciones-menu (p.ej. una accion secundaria), no se
+      // cierra aqui; la propia accion re-renderiza la lista.
+      if (!(ev.target.closest && ev.target.closest(".acciones-menu"))) {
+        cerrarMenusAcciones(null);
+      }
+    });
+
+    // Escape cierra el menu abierto (solo si hay alguno visible).
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Escape") {
+        return;
+      }
+      var abierto = $(".acciones-menu__panel:not([hidden])");
+      if (abierto) {
+        cerrarMenusAcciones(null);
+      }
+    });
   }
 
   function on(sel, evento, handler) {

@@ -52,6 +52,7 @@
     reanudar: 1,      // play
     eliminar: 1,      // bote de basura (Eliminar)
     cerrar: 1,        // x (Cerrar modal)
+    mas_acciones: 1,  // tres puntos (menu de mas acciones por tarjeta)
     alerta: 1,        // triangulo de alerta (Faltan por pagar)
     check_circulo: 1, // check en circulo (Ya pagaron)
     recibo: 1,        // ticket (Ver recibo)

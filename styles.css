@@ -847,6 +847,61 @@ body {
   border-top: 1px solid var(--borde);
 }
 
+/* ---------------------- Menu '•••' de acciones (FEAT-004) -------------
+   Punto 5 del pulido: dejar Pagar/Avisar compactos y visibles en la fila
+   y agrupar las acciones secundarias (Historial, editar, pausar, eliminar
+   y revertir) en un popover que abre el boton '•••' (.acciones-menu__toggle).
+   Importante: los botones secundarios SIGUEN siendo los mismos .accion-*
+   dentro de .acciones-menu__panel; aqui solo se estila el contenedor y el
+   popover. La delegacion de listeners (por clase) no cambia. */
+
+/* Pagar/Avisar compactos en fila: no estiran, solo su contenido. */
+.tarjeta__acciones .accion-avisar,
+.tarjeta__acciones .accion-pagar {
+  flex: 0 0 auto;
+}
+
+/* El menu empuja el '•••' al extremo derecho de la fila de acciones. */
+.acciones-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.acciones-menu__toggle {
+  flex: 0 0 auto;
+}
+
+/* Popover de acciones secundarias: tarjeta flotante alineada al borde
+   derecho del '•••', coherente con ambos temas via variables. */
+.acciones-menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 170px;
+  padding: 8px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-suave);
+}
+
+/* Cuando el panel esta oculto, el atributo [hidden] ya lo quita del flujo;
+   reforzamos por si algun estilo previo cambiara su display. */
+.acciones-menu__panel[hidden] {
+  display: none;
+}
+
+/* Dentro del popover los botones ocupan todo el ancho y quedan alineados
+   a la izquierda, como un menu desplegable. */
+.acciones-menu__panel .btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .estado-vacio {
   grid-column: 1 / -1;
   text-align: center;
@@ -2415,21 +2470,38 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
     min-height: var(--toque-min);
   }
 
-  /* Botones de texto principales (chips): Avisar, Pagar, Revertir,
-     Historial. Que llenen el ancho repartiendose la fila para ser el
-     objetivo de toque mas grande y comodo. */
-  .tarjeta__acciones .btn--chip {
+  /* Botones de texto principales (chips) EN LA FILA: Avisar y Pagar.
+     Que se repartan la fila para ser objetivos de toque grandes. Se
+     excluyen los chips que viven DENTRO del popover (.acciones-menu__panel),
+     que deben quedar a lo ancho en columna. */
+  .tarjeta__acciones > .btn--chip {
     flex: 1 1 calc(50% - 5px);
     justify-content: center;
     font-size: 0.92rem;
     padding: 10px 12px;
   }
 
-  /* Botones de icono (editar, pausar, eliminar): cuadrados y tocables,
-     alineados al final de la fila. */
+  /* Botones de icono (incluido el '•••' .acciones-menu__toggle): cuadrados
+     y tocables. */
   .tarjeta__acciones .btn--icono {
     flex: 0 0 auto;
     min-width: var(--toque-min);
+  }
+
+  /* FEAT-004: en movil el popover se alinea al borde derecho y sus botones
+     ocupan todo el ancho con area de toque comoda. */
+  .acciones-menu {
+    flex: 0 0 auto;
+  }
+
+  .acciones-menu__panel {
+    min-width: 200px;
+  }
+
+  .acciones-menu__panel .btn--chip {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    min-height: var(--toque-min);
   }
 
   .clientes__acciones .btn--secundario {

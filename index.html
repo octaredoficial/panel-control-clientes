@@ -177,6 +177,11 @@
         <path d="M6 6l12 12"></path>
         <path d="M18 6 6 18"></path>
       </symbol>
+      <symbol id="icono-mas-acciones" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="1"></circle>
+        <circle cx="12" cy="12" r="1"></circle>
+        <circle cx="19" cy="12" r="1"></circle>
+      </symbol>
       <symbol id="icono-alerta" viewBox="0 0 24 24">
         <path d="M12 3 2.5 20h19z"></path>
         <path d="M12 9v5"></path>
@@ -682,6 +687,18 @@
         <span class="etiqueta-tipo"></span>
         <span class="etiqueta-socio"></span>
       </div>
+      <!--
+        FEAT-004: acciones compactas de tarjeta.
+        - PRIMARIAS (visibles en fila): Avisar y Pagar.
+        - SECUNDARIAS (Historial, editar, pausar, eliminar, revertir):
+          siguen siendo los MISMOS botones con sus clases .accion-*, pero
+          ahora viven dentro del popover .acciones-menu__panel que abre el
+          boton '•••' (.acciones-menu__toggle). NO se cambia el cableado:
+          la delegacion de listeners sigue siendo por clase (ver app.js),
+          por lo que app.js sigue localizando .accion-pausar (icono play/
+          pausa + title) y .accion-revertir (hidden segun tienePago) aunque
+          esten dentro del panel oculto. El '•••' solo los agrupa/oculta.
+      -->
       <div class="tarjeta__acciones">
         <button type="button" class="btn btn--chip accion-avisar">
           <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-avisar"></use></svg></span> Avisar
@@ -689,15 +706,33 @@
         <button type="button" class="btn btn--chip btn--exito accion-pagar">
           <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-pagar"></use></svg></span> Pagar
         </button>
-        <button type="button" class="btn btn--chip btn--revertir accion-revertir" title="Revertir el último pago" aria-label="Revertir el último pago" hidden>
-          <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-revertir"></use></svg></span> Revertir
-        </button>
-        <button type="button" class="btn btn--chip accion-historial" title="Historial de pagos" aria-label="Historial de pagos">
-          <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-recibos"></use></svg></span> Historial
-        </button>
-        <button type="button" class="btn btn--icono accion-editar" title="Editar" aria-label="Editar"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-editar"></use></svg></button>
-        <button type="button" class="btn btn--icono accion-pausar" title="Pausar / Reanudar" aria-label="Pausar o reanudar"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-pausar"></use></svg></button>
-        <button type="button" class="btn btn--icono btn--peligro accion-eliminar" title="Eliminar" aria-label="Eliminar"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-eliminar"></use></svg></button>
+        <div class="acciones-menu">
+          <button type="button" class="btn btn--icono acciones-menu__toggle" aria-haspopup="true" aria-expanded="false" aria-label="Más acciones" title="Más acciones">
+            <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-mas-acciones"></use></svg>
+          </button>
+          <div class="acciones-menu__panel" hidden>
+            <button type="button" class="btn btn--chip btn--revertir accion-revertir" title="Revertir el último pago" aria-label="Revertir el último pago" hidden>
+              <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-revertir"></use></svg></span> Revertir
+            </button>
+            <button type="button" class="btn btn--chip accion-historial" title="Historial de pagos" aria-label="Historial de pagos">
+              <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-recibos"></use></svg></span> Historial
+            </button>
+            <button type="button" class="btn btn--chip accion-editar" title="Editar" aria-label="Editar">
+              <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-editar"></use></svg></span> Editar
+            </button>
+            <!--
+              .accion-pausar: app.js REESCRIBE su innerHTML con iconoSVG()
+              (pausar/reanudar) en cada render, por lo que este boton es
+              icono-only y su significado va en title/aria-label (que app.js
+              tambien actualiza). No se le pone texto fijo aqui para no
+              perderlo al reescribir el innerHTML.
+            -->
+            <button type="button" class="btn btn--chip accion-pausar" title="Pausar / Reanudar" aria-label="Pausar o reanudar"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-pausar"></use></svg></button>
+            <button type="button" class="btn btn--chip btn--peligro accion-eliminar" title="Eliminar" aria-label="Eliminar">
+              <span aria-hidden="true"><svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><use href="#icono-eliminar"></use></svg></span> Eliminar
+            </button>
+          </div>
+        </div>
       </div>
     </article>
   </template>
