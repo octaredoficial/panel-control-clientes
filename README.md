@@ -469,6 +469,43 @@ Esto implica que:
 - Los datos **permanecen** aunque cierres y vuelvas a abrir la página, porque viven en la nube (no dependen de un solo navegador).
 - Si borras el almacenamiento local del sitio, no pierdes nada: al volver a iniciar sesión los datos se **vuelven a traer desde Firestore**.
 
+## Experiencia móvil (diseño "tipo app")
+
+La aplicación se usa **principalmente en el celular** (y a veces en PC), así que la interfaz está pensada **primero para móvil** y se siente como una app nativa, sin dejar de verse bien en pantalla grande. Todo conserva el **diseño minimalista**, el **modo claro/oscuro** y **toda la funcionalidad** de siempre: solo cambia la capa visual y de navegación, no la lógica del negocio.
+
+Qué cambia en el teléfono:
+
+- **Barra de navegación inferior** fija (tipo app), con los accesos al alcance del pulgar:
+  - **Inicio:** vuelve al panel principal (Resumen, Pagos, Clientes, etc.).
+  - **Red:** abre el **Mapa de red** (equivale al botón de Red del escritorio).
+  - **Historial:** abre el **Historial de meses**.
+  - **Acciones (➕ / menú):** abre una **hoja de acciones** con Nuevo Cliente, Nuevo Ahorro, Nuevo Gasto y Configuración. El cambio de tema (claro/oscuro) y Cerrar sesión siguen disponibles.
+  - La barra respeta el **área segura** del iPhone (gestos de la parte inferior) y el contenido deja espacio para que no la tape.
+- **Tarjetas de cliente táctiles:** nombre, monto y estado grandes y legibles; botones de **Avisar**, **Pagar**, **Revertir** e **Historial** a lo ancho para tocarlos fácil, y los íconos de **editar / pausar / eliminar** con área de toque cómoda (mínimo 44 px).
+- **Resumen, estadísticas y reparto apilados** en una sola columna, con números grandes (Ingresos, Egresos, Ganancia, Por cobrar, Facturación, Reparto) fáciles de leer de un vistazo.
+- **Modales tipo hoja (bottom sheet):** los formularios (Nuevo Cliente, Nuevo Gasto, Configuración, Historial de pagos y el Recibo) suben desde abajo, ocupan todo el ancho, se redondean solo por arriba y hacen **scroll interno**. El botón de **cerrar (✕)** es grande, y los campos usan una fuente de **16 px** para que **iOS no haga zoom** al enfocar y para que el **teclado no tape** los campos (el contenido se puede desplazar). La impresión del **recibo** no se ve afectada: al imprimir sigue saliendo **solo el recibo**.
+- **Historial de meses usable en pantalla chica:** la tabla hace **scroll horizontal suave** y la **columna Mes queda fija** a la izquierda para no perder la referencia al deslizar; la **gráfica SVG** escala, permite scroll horizontal y respeta claro/oscuro.
+- **Mapa de red en una columna:** las tarjetas se apilan con scroll vertical cómodo, el **buscador ocupa todo el ancho**, los nodos y el botón **Asignar cliente** son tocables y la leyenda se lee bien; los conectores SVG se redibujan al rotar o cambiar de tamaño sin romper el diseño.
+- **Instalable (PWA ligera):** se incluye un `manifest.json` **100% local** (nombre, color de tema, `display: standalone` e icono SVG local `icono.svg`), así que en Android/Chrome se puede **"Agregar a la pantalla de inicio"** y abrir a pantalla completa, y en iPhone con **"Añadir a pantalla de inicio"** desde Safari.
+
+### Sobre la PWA: qué se incluyó y qué no (y por qué)
+
+- **Sí** se añadió un **manifest** e **iconos locales** (SVG) y las etiquetas `theme-color` / `apple-mobile-web-app-*` en `index.html`. Son recursos **locales**, sin CDNs ni dependencias nuevas, y **no interfieren** con nada.
+- **No** se añadió un **service worker**. La app carga los **SDK de Firebase como módulos ES desde gstatic en tiempo de ejecución**; un service worker que cachee o intercepte peticiones podría **interferir con Firebase/Netlify** y **no se puede probar en este entorno** (sin navegador ni acceso a la red de Firebase). Por eso se dejó fuera para **no añadir riesgo**: la app seguirá siendo instalable y "tipo app" igual. Si en el futuro se quiere soporte offline, habría que agregar un service worker que **excluya explícitamente** las peticiones a `gstatic`/Firebase y probarlo en un dispositivo real.
+
+### Verificación manual de la experiencia móvil
+
+Como en el entorno de pruebas **no hay navegador ni pantalla**, esto se comprueba a mano en tus dispositivos reales. Abre el sitio de Netlify (**https://ornate-melba-f303fc.netlify.app**) en **iPhone y/o Android** y también en **PC**, inicia sesión y revisa:
+
+1. **Barra inferior:** navega con **Inicio / Red / Historial** y con el botón de **Acciones**; confirma que cada uno abre lo esperado y que la pestaña activa se resalta.
+2. **Cobrar desde una tarjeta:** pulsa **✔️ Pagar** en un cliente, elige periodo y monto, confirma y revisa el recibo; luego pulsa **↩️ Revertir** y confirma que el Resumen y el Reparto se recalculan.
+3. **Secciones:** abre **Red** y **Historial** y vuelve a **Inicio**; comprueba que el scroll es suave y que nada queda tapado por la barra inferior.
+4. **Modales y teclado:** abre **Nuevo Cliente** y **Configuración**; confirma que suben como hoja, que el botón de cerrar es cómodo y que, al escribir en un campo, **el teclado no lo tapa** (se puede desplazar) y **no hace zoom** al enfocar.
+5. **Tablas y mapa:** en **Historial de meses** desliza la tabla en horizontal y verifica que la **columna Mes queda fija**; en el **Mapa de red** confirma una sola columna, buscador a ancho completo y botones **Asignar cliente** fáciles de tocar.
+6. **Girar el teléfono:** cambia entre **vertical y horizontal** y comprueba que todo se reacomoda sin romperse.
+7. **Claro/oscuro:** alterna el tema con 🌙 / ☀️ y verifica que toda la interfaz móvil (tarjetas, hojas, tabla, gráfica y mapa) respeta el color.
+8. **Instalar (opcional):** en Android/Chrome usa **"Agregar a la pantalla de inicio"**; en iPhone/Safari usa **"Añadir a pantalla de inicio"** y abre el icono para verla a pantalla completa.
+
 ## Nota sobre WhatsApp
 
 El botón **Avisar** abre un enlace de WhatsApp (`https://wa.me/...`) con el mensaje prellenado. El número de celular se normaliza a solo dígitos y, si tiene 10 dígitos, se le antepone el código de país de México (**52**).
