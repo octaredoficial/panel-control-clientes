@@ -2145,6 +2145,52 @@ table.historial-tabla tbody tr:last-child td {
     grid-template-columns: 1fr;
   }
 
+  /* ---- Resumen / Metricas, Estadisticas y Reparto apilados ----
+     En una sola columna los numeros deben leerse grandes y claros.
+     Se usan variables de la paleta; nada hardcodeado. */
+  .metricas,
+  .reparto__totales {
+    gap: 12px;
+  }
+
+  .metrica__valor {
+    font-size: 1.7rem;
+  }
+
+  .metrica__etiqueta,
+  .stat__etiqueta {
+    font-size: 0.88rem;
+  }
+
+  .stat__valor {
+    font-size: 1.9rem;
+  }
+
+  .reparto__socio-valor {
+    font-size: 1.8rem;
+  }
+
+  /* El reparto por filas y la lista de meses: etiquetas y montos legibles
+     y sin desbordarse en pantalla chica. */
+  .reparto__etiqueta,
+  .stats-mes__etiqueta {
+    font-size: 0.92rem;
+  }
+
+  .reparto__valor,
+  .stats-mes__valor {
+    font-size: 1rem;
+  }
+
+  .reparto__item--total .reparto__valor {
+    font-size: 1.25rem;
+  }
+
+  /* Panel "Faltan por pagar": el resumen de pendientes legible en columna. */
+  .pagos__resumen {
+    font-size: 0.95rem;
+  }
+
   .historial__fila {
     flex-direction: column;
     align-items: stretch;
@@ -2157,6 +2203,62 @@ table.historial-tabla tbody tr:last-child td {
 
   .lista-tarjetas {
     grid-template-columns: 1fr;
+  }
+
+  /* ---- Tarjetas de cliente "tipo app" en movil ----
+     Mas aire interno y datos mas legibles de un vistazo. */
+  .tarjeta {
+    gap: 14px;
+    padding: 16px 16px 14px;
+  }
+
+  .tarjeta__nombre {
+    font-size: 1.1rem;
+  }
+
+  .tarjeta__monto {
+    font-size: 1.15rem;
+  }
+
+  .tarjeta__datos {
+    font-size: 0.92rem;
+    gap: 8px 12px;
+  }
+
+  /* El badge de estado (Vencido / Vence / Pagado) bien visible. */
+  .tarjeta__estado {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+  }
+
+  /* Acciones tactiles: acentos primarios Avisar y Pagar a lo ancho
+     (media fila cada uno) y los iconos secundarios en una fila comoda.
+     Se mantienen TODAS las clases .accion-* y .btn--* (los listeners
+     delegados de #lista-pagos/#lista-clientes dependen de ellas). */
+  .tarjeta__acciones {
+    gap: 10px;
+    padding-top: 12px;
+  }
+
+  .tarjeta__acciones .btn {
+    min-height: var(--toque-min);
+  }
+
+  /* Botones de texto principales (chips): Avisar, Pagar, Revertir,
+     Historial. Que llenen el ancho repartiendose la fila para ser el
+     objetivo de toque mas grande y comodo. */
+  .tarjeta__acciones .btn--chip {
+    flex: 1 1 calc(50% - 5px);
+    justify-content: center;
+    font-size: 0.92rem;
+    padding: 10px 12px;
+  }
+
+  /* Botones de icono (editar, pausar, eliminar): cuadrados y tocables,
+     alineados al final de la fila. */
+  .tarjeta__acciones .btn--icono {
+    flex: 0 0 auto;
+    min-width: var(--toque-min);
   }
 
   .clientes__acciones .btn--secundario {
@@ -2208,6 +2310,47 @@ table.historial-tabla tbody tr:last-child td {
     max-width: 100%;
     max-height: 92vh;
     border-radius: var(--radio) var(--radio) 0 0;
+  }
+}
+
+/* ---- Pantallas muy chicas (<=480px) ----
+   Afinar espaciado y tamanos para que tarjetas, metricas, estadisticas y
+   reparto no queden apretados en telefonos pequenos, conservando el
+   minimalismo y los objetivos de toque comodos. */
+@media (max-width: 480px) {
+  .panel {
+    padding: 18px 16px;
+  }
+
+  /* En telefono chico Avisar y Pagar ocupan toda la fila (un boton por
+     linea) para un objetivo de toque amplio; el resto de chips comparte
+     fila. Las clases de accion y de boton se conservan intactas. */
+  .tarjeta__acciones .accion-avisar,
+  .tarjeta__acciones .accion-pagar {
+    flex: 1 1 100%;
+  }
+
+  .tarjeta__nombre {
+    font-size: 1.05rem;
+  }
+
+  /* Numeros grandes y legibles en una columna. */
+  .metrica__valor {
+    font-size: 1.55rem;
+  }
+
+  .stat__valor {
+    font-size: 1.7rem;
+  }
+
+  .reparto__socio-valor {
+    font-size: 1.6rem;
+  }
+
+  /* La lista de meses en una sola columna (ya colapsa en 640, aqui se
+     asegura separacion vertical comoda). */
+  .stats-mes__lista {
+    gap: 4px 0;
   }
 }
 
