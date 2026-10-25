@@ -334,7 +334,13 @@
         <div class="panel__cabecera">
           <div class="resumen__nav">
             <button type="button" id="btn-mes-prev" class="btn btn--icono btn--nav" title="Mes anterior" aria-label="Mes anterior">‹</button>
-            <h2 class="panel__titulo" id="resumen-titulo">Resumen de <span id="resumen-mes">Mes de Año</span></h2>
+            <!-- Punto 4 (paquete 0-6): titulo principal en una linea y el mes
+                 como SUBTITULO debajo. Se CONSERVA el id #resumen-mes (app.js lo
+                 actualiza con la navegacion ‹ ›); solo cambia su envoltura/estilo. -->
+            <hgroup class="panel__titulo-grupo" id="resumen-titulo">
+              <h2 class="panel__titulo">Resumen del mes</h2>
+              <p class="panel__subtitulo"><span id="resumen-mes">Mes de Año</span></p>
+            </hgroup>
             <button type="button" id="btn-mes-next" class="btn btn--icono btn--nav" title="Mes siguiente" aria-label="Mes siguiente">›</button>
           </div>
         </div>
@@ -367,9 +373,13 @@
       <!-- ================= REPARTO DE FIN DE MES ================= -->
       <section class="panel panel--reparto" aria-labelledby="reparto-titulo">
         <div class="panel__cabecera">
-          <h2 class="panel__titulo" id="reparto-titulo">Reparto de fin de mes
-            <span class="panel__titulo-sufijo">( <span id="reparto-mes">Mes de Año</span> )</span>
-          </h2>
+          <!-- Punto 4 (paquete 0-6): el mes pasa de "( Octubre de 2026 )" en la
+               misma linea a un SUBTITULO debajo del titulo. Se CONSERVA el id
+               #reparto-mes (app.js lo actualiza); solo cambia su envoltura. -->
+          <hgroup class="panel__titulo-grupo" id="reparto-titulo">
+            <h2 class="panel__titulo">Reparto de fin de mes</h2>
+            <p class="panel__subtitulo"><span id="reparto-mes">Mes de Año</span></p>
+          </hgroup>
           <span class="panel__nota" title="Los ingresos del reparto se basan en los pagos cobrados de clientes (botón Pagar) con fecha en el mes seleccionado, no en los ingresos manuales.">según pagos cobrados</span>
         </div>
 
@@ -396,7 +406,7 @@
             <span class="reparto__etiqueta">Ganancia a repartir</span>
             <span class="reparto__valor" id="reparto-ganancia">$0.00</span>
           </li>
-          <li class="reparto__item">
+          <li class="reparto__item reparto__item--mitad">
             <span class="reparto__etiqueta">Mitad por socio</span>
             <span class="reparto__valor" id="reparto-mitad">$0.00</span>
           </li>

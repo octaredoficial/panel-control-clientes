@@ -391,6 +391,24 @@ body {
   font-weight: 500;
 }
 
+/* Titulo de panel con MES como subtitulo (punto 4 del paquete 0-6).
+   El <hgroup> apila el titulo principal y, debajo, el mes como subtitulo
+   secundario (mas limpio que "( Octubre de 2026 )" en la misma linea y
+   sin cortes raros en movil). Se usa en Resumen y Reparto. */
+.panel__titulo-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.panel__subtitulo {
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
 /* Nota aclaratoria "a la fecha de hoy" en Estadisticas y Pagos.
    Deja claro que el estado de pago se mide contra hoy, no contra el
    mes seleccionado en el resumen (hallazgo de revision #3). */
@@ -472,22 +490,34 @@ body {
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  padding: 10px 2px;
-  border-bottom: 1px dashed var(--borde);
+  padding: 11px 2px;
+  /* Punto 5 (paquete 0-6): separador SOLIDO muy tenue en vez de punteado
+     (antes "1px dashed", se veia de hoja de calculo). color-mix baja la
+     opacidad del borde en ambos temas. */
+  border-bottom: 1px solid color-mix(in srgb, var(--borde) 60%, transparent);
 }
 
+/* Jerarquia del reparto (punto 3 del paquete 0-6): las filas intermedias
+   (Ingresos del mes, − Starlink, − Luz, − Pagos directos) son SECUNDARIAS:
+   etiqueta y monto algo mas tenues/pequenos; los montos rojos de resta se
+   atenuan con color-mix para que no dominen. Los totales (Ganancia a
+   repartir, Mitad por socio y sobre todo Total Carlos/Octavio) crecen en
+   tamano/peso mas abajo. No cambia ningun valor ni el calculo. */
 .reparto__etiqueta {
   color: var(--texto-suave);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .reparto__valor {
-  font-weight: 700;
-  font-size: 0.98rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--texto-suave);
   white-space: nowrap;
 }
 
-.reparto__valor--resta { color: var(--rojo); }
+/* Monto de resta (Starlink/Luz/Pagos directos) en rojo ATENUADO: sigue
+   siendo rojo semantico pero mas suave para no competir con los totales. */
+.reparto__valor--resta { color: color-mix(in srgb, var(--rojo) 78%, var(--texto-suave)); }
 
 .reparto__item--total {
   border-bottom: none;
@@ -498,13 +528,28 @@ body {
 
 .reparto__item--total .reparto__etiqueta {
   color: var(--texto);
-  font-weight: 700;
-  font-size: 0.98rem;
+  font-weight: 800;
+  font-size: 1.05rem;
 }
 
 .reparto__item--total .reparto__valor {
   color: var(--acento);
-  font-size: 1.15rem;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+/* "Mitad por socio": fila intermedia pero mas destacada que las de resta
+   (es el paso previo a los totales por socio). Peso/tamano medios. */
+.reparto__item--mitad .reparto__etiqueta {
+  color: var(--texto);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.reparto__item--mitad .reparto__valor {
+  color: var(--texto);
+  font-weight: 700;
+  font-size: 1.05rem;
 }
 
 .reparto__nota {
@@ -544,15 +589,18 @@ body {
 .reparto__socio--octavio { border-left: 3px solid var(--verde); }
 
 .reparto__socio-etiqueta {
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   color: var(--texto-suave);
-  font-weight: 600;
+  font-weight: 700;
 }
 
+/* Total Carlos/Octavio: los montos MAS dominantes del panel (punto 3).
+   Conservan su color (acento/verde) via las reglas de socio--carlos/octavio. */
 .reparto__socio-valor {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .reparto__socio--carlos .reparto__socio-valor { color: var(--acento); }
@@ -659,7 +707,8 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px dashed var(--borde);
+  /* Punto 5 (paquete 0-6): separador solido muy tenue (antes punteado). */
+  border-bottom: 1px solid color-mix(in srgb, var(--borde) 60%, transparent);
 }
 
 .stats-mes__etiqueta { color: var(--texto-suave); font-size: 0.9rem; }
@@ -726,11 +775,27 @@ body {
   border-color: transparent;
 }
 
+/* Badge de estado DENTRO de la tarjeta de cliente (punto 2 del paquete
+   0-6): mas pequeno y discreto que un .badge normal para que el NOMBRE
+   del cliente sea el protagonista. Pastilla compacta: fuente mas chica,
+   menos padding y peso. Conserva los colores semanticos (fondo tenue +
+   texto del color, que ya heredan de estado-vencido/proximo/pagado/ok). */
+.tarjeta__estado {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  flex: 0 0 auto;
+}
+
 /* ---------------------- Listas / tarjetas ----------------- */
 .lista-tarjetas {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 14px;
+  /* Punto 6 (paquete 0-6): un poco mas de aire entre tarjetas para que
+     respiren, estilo iOS. Aplica a #lista-clientes, #lista-pagos y
+     #lista-movimientos (todos usan .lista-tarjetas). */
+  gap: 18px;
 }
 
 /* Subtitulos de los dos bloques de la lista de clientes (cobranza del mes):
@@ -798,14 +863,39 @@ body {
   border-color: var(--borde-fuerte);
 }
 
-/* Acento lateral segun estado (lo pone FEAT-003 anadiendo la clase
-   estado-* a la tarjeta o leyendo el badge interno). */
-.tarjeta--vencido { border-left: 3px solid var(--rojo); }
-.tarjeta--proximo { border-left: 3px solid var(--ambar); }
-.tarjeta--pagado { border-left: 3px solid var(--verde); }
+/* Acento lateral SUTIL segun estado (la clase estado-* la pone app.js en
+   crearTarjeta). Refinamiento iOS (paquete 0-6, punto 1): antes era un
+   borde-izquierdo GRUESO de color que competia con el borde de la tarjeta
+   ("doble borde", se veia muy "web"). Ahora el acento es un borde izquierdo
+   mas DELGADO y ATENUADO (color-mix con la --superficie para suavizar el
+   tono) mas una tinta de fondo apenas perceptible del color de estado.
+   Mantiene la semantica (rojo=vencido, ambar=proximo, verde=pagado,
+   neutro=ok) pero en version suave y sin competir con el borde base.
+   color-mix da el mismo resultado en claro/oscuro porque parte de las
+   variables de cada tema. */
+.tarjeta--vencido {
+  border-left: 2px solid color-mix(in srgb, var(--rojo) 55%, var(--superficie));
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--rojo) 7%, var(--superficie)),
+    var(--superficie) 40%);
+}
+.tarjeta--proximo {
+  border-left: 2px solid color-mix(in srgb, var(--ambar) 55%, var(--superficie));
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--ambar) 7%, var(--superficie)),
+    var(--superficie) 40%);
+}
+.tarjeta--pagado {
+  border-left: 2px solid color-mix(in srgb, var(--verde) 50%, var(--superficie));
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--verde) 6%, var(--superficie)),
+    var(--superficie) 40%);
+}
 /* Neutro: cliente que falta por pagar el mes pero cuyo dia de pago aun no
-   llega (badge "Faltan N días"). Acento lateral suave. */
-.tarjeta--ok { border-left: 3px solid var(--borde-fuerte); }
+   llega (badge "Faltan N días"). Acento lateral muy tenue, sin tinte. */
+.tarjeta--ok {
+  border-left: 2px solid color-mix(in srgb, var(--borde-fuerte) 70%, var(--superficie));
+}
 
 .tarjeta__cabecera {
   display: flex;
@@ -821,9 +911,12 @@ body {
 }
 
 .tarjeta__nombre {
-  font-size: 1.1rem;
+  /* Refinamiento iOS (punto 2): el NOMBRE es el protagonista de la tarjeta;
+     se le da mas peso relativo frente al badge de estado (mas pequeno). */
+  font-size: 1.18rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
 }
 
 .tarjeta__megas {
@@ -1871,7 +1964,8 @@ body {
   display: flex;
   justify-content: flex-end;
   padding: 8px 12px;
-  border-top: 1px dashed var(--borde);
+  /* Punto 5 (paquete 0-6): separador solido muy tenue en vez de punteado. */
+  border-top: 1px solid color-mix(in srgb, var(--borde) 60%, transparent);
   background: var(--superficie);
 }
 
@@ -2873,7 +2967,8 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
    de Netlify (o cambiando de plan), porque no vive en el repositorio.
    ============================================================ */
 
-/* Ids y clases tipicos del badge de Netlify. */
+/* Ids y clases tipicos del badge de Netlify (case-insensitive con " i"
+   para cubrir variantes de mayusculas/minusculas que use Netlify). */
 #netlify-badge,
 .netlify-badge,
 #netlify-badge-container,
@@ -2881,20 +2976,52 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
 [id^="netlify-badge"],
 [class^="netlify-badge"],
 [class*=" netlify-badge"],
-[data-netlify-badge] {
+[data-netlify-badge],
+[id*="netlify" i],
+[class*="netlify" i] {
   display: none !important;
 }
 
-/* Anchors/iframes FIJOS (esquina) que apuntan a netlify.com: el badge
-   gratuito suele ser un enlace o iframe posicionado en una esquina de
-   la ventana. Limitamos a position:fixed para NO tocar los enlaces a
-   Netlify que aparezcan dentro del contenido normal (p. ej. el README
-   renderizado o textos de ayuda). */
+/* Anchors/iframes que apuntan a netlify.com: el badge gratuito suele ser
+   un enlace o iframe posicionado FIJO en una esquina de la ventana. Se
+   cubren tanto los que declaran position:fixed inline como los que solo
+   enlazan a netlify.com (incluyendo el enlace "Deploys by Netlify" con
+   aria-label/title tipicos). Aun asi, para NO tocar enlaces propios a
+   Netlify que aparezcan DENTRO del contenido (README renderizado, ayuda),
+   los selectores amplios se limitan a position:fixed. */
 a[href*="netlify.com"][style*="position: fixed"],
 a[href*="netlify.com"][style*="position:fixed"],
+a[href*="netlify.app"][style*="position: fixed"],
+a[href*="netlify.app"][style*="position:fixed"],
 iframe[src*="netlify.com"][style*="position: fixed"],
 iframe[src*="netlify.com"][style*="position:fixed"],
+iframe[src*="netlify.app"][style*="position: fixed"],
+iframe[src*="netlify.app"][style*="position:fixed"],
 a[href*="app.netlify.com"][style*="position: fixed"],
-a[href*="app.netlify.com"][style*="position:fixed"] {
+a[href*="app.netlify.com"][style*="position:fixed"],
+a[href*="netlify.com"][aria-label*="netlify" i],
+a[href*="netlify.com"][title*="netlify" i],
+iframe[title*="netlify" i],
+iframe[name*="netlify" i] {
   display: none !important;
 }
+
+/* Contenedor fijo (normalmente un <div style="position: fixed ...">) que
+   Netlify inyecta en una esquina para envolver el enlace/badge. Solo se
+   oculta cuando ademas contiene un enlace a netlify. Se usa :has() (bien
+   soportado hoy); si el navegador no lo soporta, simplemente no aplica y
+   no rompe nada. Se limita a position:fixed para no ocultar contenedores
+   propios. */
+div[style*="position: fixed"]:has(> a[href*="netlify.com"]),
+div[style*="position:fixed"]:has(> a[href*="netlify.com"]),
+div[style*="position: fixed"]:has(> a[href*="netlify.app"]),
+div[style*="position:fixed"]:has(> a[href*="netlify.app"]) {
+  display: none !important;
+}
+
+/* LIMITE REALISTA: si Netlify inyecta el badge dentro de un IFRAME de OTRO
+   ORIGEN, el CSS de este sitio NO puede alcanzar su interior para ocultarlo.
+   Si ese iframe es identificable por un atributo (title/name/src con
+   "netlify"), las reglas de arriba lo ocultan entero; si no, no hay forma
+   por CSS. En ese caso el badge se retira desde la configuracion/plan de
+   Netlify (documentado en el README). No se toca netlify.toml. */

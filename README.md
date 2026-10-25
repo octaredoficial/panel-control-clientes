@@ -112,12 +112,24 @@ Como fase de **pulido visual**, la interfaz se afinó para sentirse como una app
 
 > **Donde este README describe acciones con emojis** (por ejemplo **✔️ Pagar**, **💬 Avisar**, **📜 Historial**, **🗺️ Red**, **📊 Historial**, **⚙️ Configuración** o **🌙/☀️** del tema), ten en cuenta que en la interfaz actual esos emojis se muestran como **iconos SVG de línea**. Los emojis se conservan en el texto solo como **referencia visual rápida** de a qué acción corresponde cada icono.
 
+### Refinamientos visuales iOS (segunda ronda)
+
+Una segunda ronda de **pulido puramente visual** (sin tocar la lógica, conservando claro/oscuro y todas las variables CSS) afinó estos detalles:
+
+- **Acento lateral sutil en las tarjetas:** la barra lateral de color que marcaba el estado (roja para vencidos, etc.) era **gruesa** y competía con el borde de la tarjeta ("doble borde", se veía muy "web"). Ahora es un **borde izquierdo más delgado y atenuado** (con `color-mix` sobre la superficie) más una **tinta de fondo apenas perceptible** del color de estado. Se mantiene la semántica (**rojo = vencido, ámbar = próximo, verde = pagado, neutro = al corriente**) pero en versión suave y en **ambos temas**.
+- **Badge de estado más pequeño y discreto:** la pastilla de estado de la tarjeta (**"Vencido hace N días"**, **"Vence…"**, **"Pagado (mes)"**) se **achicó** (menos fuente, padding y peso) para que el **nombre del cliente** sea el protagonista. Conserva los colores semánticos pero más sobrios (fondo tenue + texto del color).
+- **Jerarquía en el reparto:** en **"Reparto de fin de mes"** las filas intermedias (Ingresos del mes, − Starlink, − Luz, − Pagos directos a Octavio) quedan **más tenues/secundarias** (los montos de resta en rojo atenuado), y **"Ganancia a repartir"**, **"Mitad por socio"** y sobre todo **"Total Carlos" / "Total Octavio"** **dominan** (mayor tamaño/peso). **No cambian los valores ni el cálculo**, solo el peso/tamaño/color.
+- **Mes como subtítulo:** en **Resumen** y **Reparto**, el mes ya **no va entre paréntesis** en la misma línea (**"Reparto de fin de mes ( Octubre de 2026 )"**); ahora el **título principal** va en una línea y el **mes queda como subtítulo** debajo, más limpio y sin cortes raros en móvil. El mes lo sigue inyectando el JS por sus `id` (`#resumen-mes`, `#reparto-mes`) y la **navegación de meses ‹ ›** no cambia.
+- **Separadores tenues:** las líneas **punteadas** entre filas (en el reparto, estadísticas del mes y el pie "Asignar cliente" del mapa) se cambiaron por **líneas sólidas muy tenues** (borde con `color-mix` a baja opacidad). El **recibo** conserva a propósito sus líneas punteadas (estética de **ticket**) y su `@media print` **no cambia**.
+- **Más aire entre tarjetas:** se aumentó un poco el **espacio entre tarjetas** de cliente/pagos para que **respiren**, estilo iOS.
+
 ### Nota sobre el badge "Powered by Netlify"
 
 En el plan gratuito, **Netlify inyecta un badge flotante "Powered by Netlify"** en una esquina del sitio desplegado. Ese badge **NO está en el código de este repositorio** (no hay ningún elemento nuestro que lo pinte), así que:
 
-- Se **intenta ocultar por CSS** con reglas **defensivas y específicas** en `styles.css`, apuntando a los **id/clase típicos** del badge (`#netlify-badge`, `.netlify-badge`, etc.) y a los **anchors/iframes fijos** que apuntan a `netlify.com`. Se usaron selectores específicos **a propósito**, para **no ocultar contenido propio** (nada de un `* { display:none }` amplio).
-- **Si el badge persiste** pese a esas reglas (porque Netlify puede cambiar su marcado), se quita desde la **configuración de Netlify** o **cambiando de plan**, ya que **no vive en el repositorio** y no podemos garantizar ocultarlo solo con CSS.
+- Se **intenta ocultar por CSS** con reglas **defensivas y específicas** en `styles.css` (reforzadas en esta ronda): apuntan a los **id/clase típicos** del badge (`#netlify-badge`, `.netlify-badge`, y variantes `[id*="netlify" i]` / `[class*="netlify" i]`), a los **anchors/iframes fijos** que enlazan a `netlify.com`/`netlify.app` (incluyendo `aria-label`/`title`/`name` con "netlify"), y al **contenedor fijo** (`div[style*="position: fixed"]`) que envuelve ese enlace (vía `:has()`). Se usaron selectores específicos **a propósito**, para **no ocultar contenido propio** (nada de un `* { display:none }` amplio).
+- **Límite realista:** si Netlify inyecta el badge **dentro de un `iframe` de otro origen**, el CSS de este sitio **no puede ocultar su interior**; solo podría ocultarse el `iframe` entero **si es identificable por un atributo** (title/name/src con "netlify"). Si no lo es, **no hay forma por CSS**.
+- **Si el badge persiste** pese a esas reglas (porque Netlify puede cambiar su marcado o servirlo desde otro origen), se quita desde la **configuración de Netlify** o **cambiando de plan**, ya que **no vive en el repositorio** y no podemos garantizar ocultarlo solo con CSS.
 - `netlify.toml` **no se tocó**: la publicación del sitio sigue igual (sitio estático, sin build, publicando la raíz).
 
 ### Verificación manual del pulido visual (para Octavio, en el iPhone)
@@ -131,7 +143,13 @@ Como no hay navegador en el entorno de pruebas, esto se comprueba **a mano en el
 5. **Menú "•••" en una tarjeta:** toca el menú de **tres puntos** de una tarjeta y verifica que aparecen las acciones secundarias (editar / pausar / eliminar).
 6. **Animaciones al tocar:** al pulsar un botón o una tarjeta debe notarse un leve **`press`** (encogido suave); con *reducir movimiento* activado, nada se anima.
 7. **Claro/oscuro:** alterna el **tema** y confirma que iconos, tarjetas, barra inferior y hojas respetan el color en ambos modos.
-8. **Badge de Netlify:** comprueba si el **badge "Powered by Netlify"** **desapareció**. Si **sigue apareciendo**, quítalo desde la **configuración de Netlify** o **cambiando de plan** (no está en el código del repo; ver [Nota sobre el badge "Powered by Netlify"](#nota-sobre-el-badge-powered-by-netlify)).
+8. **Acento lateral sutil (sin doble borde):** en las tarjetas de cliente, la marca de estado debe verse como un **acento delgado y suave** (no una barra gruesa) y **no** debe competir con el borde de la tarjeta.
+9. **Badge de estado pequeño y nombre protagonista:** la pastilla **"Vencido hace N días" / "Pagado (mes)"** debe verse **chica y discreta**, y el **nombre del cliente** debe resaltar como lo más importante de la tarjeta.
+10. **Reparto con totales dominantes:** en **"Reparto de fin de mes"**, **Total Carlos / Total Octavio** (y **Ganancia a repartir / Mitad por socio**) deben **dominar**, y las filas de **Starlink / Luz / Pagos directos** verse **más tenues**.
+11. **Mes como subtítulo:** en **Resumen** y **Reparto**, el **mes** debe aparecer como **subtítulo** debajo del título (no entre paréntesis en la misma línea), y la navegación de meses **‹ ›** debe seguir cambiando ese subtítulo.
+12. **Separadores tenues:** las líneas entre filas del reparto/estadísticas deben verse como **líneas sólidas muy suaves** (ya no punteadas). El **recibo** sí conserva su punteado de ticket.
+13. **Más aire entre tarjetas:** las tarjetas deben tener **un poco más de separación** entre sí.
+14. **Badge de Netlify:** comprueba si el **badge "Powered by Netlify"** **desapareció**. Si **sigue apareciendo**, quítalo desde la **configuración de Netlify** o **cambiando de plan** (no está en el código del repo; ver [Nota sobre el badge "Powered by Netlify"](#nota-sobre-el-badge-powered-by-netlify)).
 
 ### Verificación manual del Historial de pagos y Recibos
 
