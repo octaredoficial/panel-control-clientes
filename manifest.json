@@ -1,0 +1,20 @@
+{
+  "name": "Panel de Control de Clientes - OCTARED",
+  "short_name": "OCTARED",
+  "description": "Gestion de clientes y finanzas del WISP OCTARED.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

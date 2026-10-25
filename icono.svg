@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Icono local de la app (OCTARED) para el manifest PWA.
+  Es un SVG puro, sin recursos remotos: funciona como icono normal y
+  tambien como icono "maskable" (el fondo cubre toda el area segura).
+  Paleta coherente con el acento de la app en claro/oscuro neutro.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="OCTARED">
+  <rect width="512" height="512" rx="96" fill="#2563eb"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#ffffff" stroke-width="22" opacity="0.35"/>
+  <circle cx="256" cy="256" r="96" fill="none" stroke="#ffffff" stroke-width="22" opacity="0.6"/>
+  <circle cx="256" cy="256" r="40" fill="#ffffff"/>
+  <text x="256" y="430" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="70" font-weight="700" fill="#ffffff">OCTARED</text>
+</svg>

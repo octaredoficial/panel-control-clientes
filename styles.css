@@ -1837,6 +1837,7 @@ table.historial-tabla thead th {
   letter-spacing: 0.01em;
   position: sticky;
   top: 0;
+  z-index: 1;
 }
 
 table.historial-tabla tbody tr:nth-child(even) {
@@ -1845,6 +1846,41 @@ table.historial-tabla tbody tr:nth-child(even) {
 
 table.historial-tabla tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* ---- Columna "Mes" fija al hacer scroll horizontal (FEAT-004) ----
+   La primera columna (encabezado y celda de mes) queda pegada a la
+   izquierda para no perder la referencia del mes al deslizar la tabla
+   en pantalla chica. Cada celda fija necesita un fondo OPACO propio
+   (la fila podria quedar debajo al desplazarse); se usan variables de
+   la paleta para respetar claro/oscuro. La esquina (th del Mes) va por
+   encima para cubrir tanto el eje vertical como el horizontal. */
+table.historial-tabla th:first-child,
+table.historial-tabla td.historial-celda-mes {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--superficie);
+  /* Sombra sutil al borde derecho para separar la columna fija del
+     resto cuando hay scroll. */
+  box-shadow: 1px 0 0 var(--borde);
+}
+
+/* La esquina superior izquierda (encabezado "Mes") debe quedar por
+   encima de ambas direcciones de scroll. */
+table.historial-tabla thead th:first-child {
+  z-index: 3;
+  background: var(--superficie-2);
+}
+
+/* El fondo de la celda fija sigue el color de su fila (par / impar /
+   manual) para que no se vea un parche de color distinto al desplazar. */
+table.historial-tabla tbody tr:nth-child(even) td.historial-celda-mes {
+  background: var(--superficie-2);
+}
+
+table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
+  background: var(--acento-suave);
 }
 
 .historial-num {
@@ -2301,15 +2337,140 @@ table.historial-tabla tbody tr:last-child td {
     width: 100%;
   }
 
+  /* ---- Mapa de red usable en movil (FEAT-004) ----
+     Una sola columna con scroll vertical comodo, nodos y botones de
+     accion con area de toque amplia y buscador a ancho completo. La
+     logica de red-mapa.js no cambia (solo CSS). */
+  #red-busqueda.red-busqueda {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* El lienzo ocupa todo el ancho; mas aire inferior para desplazar sin
+     que la ultima tarjeta quede pegada a la barra inferior. */
+  .red-lienzo {
+    padding: 10px 6px 20px;
+  }
+
+  /* Filas de cliente dentro de cada tarjeta: objetivo de toque comodo. */
+  .red-fila-item {
+    min-height: var(--toque-min);
+    padding: 10px 12px;
+  }
+
+  /* El boton "Asignar cliente" (y su variante mini) tocable y legible. */
+  .red-asignar-btn,
+  .red-asignar-btn--mini {
+    min-height: var(--toque-min);
+    font-size: 0.85rem;
+    padding: 8px 14px;
+  }
+
+  /* El pie de la tarjeta (donde vive "Asignar cliente") con aire y el
+     boton a lo ancho para un toque facil con el pulgar. */
+  .red-tarjeta__pie {
+    padding: 10px 12px;
+  }
+
+  .red-tarjeta__pie .red-asignar-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Leyenda legible: los items envuelven y respetan el toque. */
+  .red-leyenda {
+    gap: 8px 14px;
+  }
+
+  .red-leyenda__item {
+    font-size: 0.8rem;
+  }
+
+  /* ---- Modales "tipo hoja" (bottom sheet) en movil (FEAT-004) ----
+     El dialogo se pega al borde inferior, ocupa el ancho completo y se
+     redondea solo por arriba, como una hoja que sube. El cuerpo hace
+     scroll interno comodo y el teclado del telefono no tapa los campos
+     porque limitamos la ALTURA al viewport (dvh cuando existe) y
+     dejamos que el contenido se desplace. Nada hardcodeado: paleta por
+     variables. El @media print del recibo (mas abajo) NO se toca. */
   .modal {
     padding: 0;
     align-items: flex-end;
   }
 
-  .modal__dialogo {
+  .modal__dialogo,
+  .modal__dialogo--ancho {
+    width: 100%;
     max-width: 100%;
     max-height: 92vh;
+    /* Respeta la barra de direcciones movil cuando el navegador soporta
+       unidades dinamicas; cae a 92vh en el resto. */
+    max-height: 92dvh;
     border-radius: var(--radio) var(--radio) 0 0;
+    /* El area segura inferior (gestos del iPhone) queda libre. */
+    padding-bottom: env(safe-area-inset-bottom);
+    /* Momentum scroll en iOS para el dialogo completo. */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Cabecera "pegajosa" para que el boton de cerrar siempre este a mano
+     mientras se hace scroll del formulario. */
+  .modal__cabecera {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--superficie);
+  }
+
+  /* Boton de cerrar grande y comodo de tocar (>= area de toque). */
+  .modal__cabecera .btn--icono {
+    min-width: var(--toque-min);
+    min-height: var(--toque-min);
+    font-size: 1.15rem;
+  }
+
+  /* El cuerpo del modal desplaza su propio contenido; al tener el
+     dialogo una altura maxima, el teclado empuja el contenido y el
+     usuario puede hacer scroll hasta el campo enfocado. */
+  .modal__cuerpo {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Aire extra al final para que el ultimo campo no quede pegado al
+       borde ni oculto tras el teclado. */
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  /* Campos de formulario tactiles: alto comodo y font-size >= 16px para
+     evitar el zoom automatico de iOS al enfocar un input/select. Afecta
+     a inputs de texto, selects y textareas dentro de los modales. */
+  .modal__cuerpo .campo,
+  .modal__cuerpo .campo--select,
+  .modal__cuerpo input,
+  .modal__cuerpo select,
+  .modal__cuerpo textarea {
+    font-size: 16px;
+    min-height: var(--toque-min);
+  }
+
+  .modal__cuerpo textarea {
+    /* Las areas de texto crecen en alto; aseguramos un minimo comodo. */
+    min-height: calc(var(--toque-min) * 2);
+  }
+
+  /* Los selects anchos del cuerpo recuperan el ancho completo en la hoja. */
+  .modal__cuerpo .campo--select {
+    width: 100%;
+  }
+
+  /* Botonera del modal: botones grandes y a lo ancho en la hoja. */
+  .modal__acciones {
+    flex-wrap: wrap;
+  }
+
+  .modal__acciones .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: var(--toque-min);
   }
 }
 
