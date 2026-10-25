@@ -83,6 +83,12 @@ ul, ol {
 
   --espacio: 20px;
   --ancho-max: 1120px;
+
+  /* Experiencia tactil / movil (tipo app). Area de toque comoda para el
+     dedo (recomendacion ~44px) y alto reservado para la barra de
+     navegacion inferior que usara una feature posterior. */
+  --toque-min: 44px;
+  --nav-inferior-alto: 60px;
 }
 
 [data-theme="oscuro"] {
@@ -173,6 +179,8 @@ body {
   transition: background-color 0.15s ease, border-color 0.15s ease,
     transform 0.05s ease, color 0.15s ease;
   white-space: nowrap;
+  /* Elimina el retardo de 300ms al tocar en algunos navegadores moviles. */
+  touch-action: manipulation;
 }
 
 .btn:hover {
@@ -797,11 +805,17 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease, transform 0.05s ease;
+  /* Toque sin retardo de 300ms en moviles. */
+  touch-action: manipulation;
 }
 
 .chip:hover {
   border-color: var(--borde-fuerte);
+}
+
+.chip:active {
+  transform: translateY(1px);
 }
 
 .chip:focus-visible {
@@ -1893,6 +1907,15 @@ table.historial-tabla tbody tr:last-child td {
 @media (max-width: 640px) {
   .app {
     padding: 18px 14px 48px;
+  }
+
+  /* Area de toque comoda para el dedo en movil (no afecta a escritorio):
+     todos los controles tactiles principales alcanzan ~44px de alto. */
+  .btn,
+  .btn--icono,
+  .chip,
+  .pestana {
+    min-height: var(--toque-min);
   }
 
   .header {
