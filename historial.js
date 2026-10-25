@@ -240,7 +240,11 @@
       // Celda de accion: eliminar (solo en filas manuales).
       var tdAccion = crearEl("td", "historial-accion");
       if (esManual) {
-        var btnDel = crearEl("button", "historial-eliminar", "🗑️ eliminar");
+        var btnDel = crearEl("button", "historial-eliminar");
+        btnDel.innerHTML =
+          '<span class="historial-icono" aria-hidden="true">' +
+          (window.PCC_ICONOS ? window.PCC_ICONOS.svg("eliminar") : "") +
+          "</span><span>eliminar</span>";
         btnDel.type = "button";
         btnDel.setAttribute("data-mes", f.mes);
         btnDel.title = "Eliminar este mes capturado manualmente";

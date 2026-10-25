@@ -201,6 +201,47 @@ body {
   line-height: 1;
 }
 
+/* ============================================================
+   ICONOS SVG DE LINEA (FEAT-002) - estilo iOS / SF Symbols
+   ------------------------------------------------------------
+   Base comun para todos los <svg class="icono"> que referencian el
+   sprite (#pcc-iconos-sprite). Trazo fino y uniforme; fill:none +
+   stroke:currentColor para que HEREDEN el color del tema (claro y
+   [data-theme="oscuro"]). Tamano relativo al texto del contexto.
+   ============================================================ */
+.icono {
+  width: 1.15em;
+  height: 1.15em;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.15em;
+  overflow: visible;
+}
+
+/* Icono dentro de un boton solo-icono (.btn--icono) o de las barras
+   tipo app: un poco mayor para que respire como en iOS. */
+.btn--icono .icono {
+  width: 1.3em;
+  height: 1.3em;
+  vertical-align: middle;
+}
+
+.nav-inferior__icono .icono {
+  width: 1.5rem;
+  height: 1.5rem;
+  vertical-align: middle;
+}
+
+.hoja-acciones__btn-icono .icono {
+  width: 1.4rem;
+  height: 1.4rem;
+  vertical-align: middle;
+}
+
 .btn--primario {
   background: var(--acento);
   color: var(--acento-contraste);
@@ -674,6 +715,22 @@ body {
   border-left: 4px solid var(--borde-fuerte);
   background: var(--superficie-2);
   color: var(--texto);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* El icono SVG del encabezado de grupo (FEAT-002) se alinea con el texto
+   y hereda el color del grupo (rojo/verde/neutro) via currentColor. */
+.grupo-clientes__icono {
+  display: inline-flex;
+  align-items: center;
+}
+
+.grupo-clientes__icono .icono {
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: middle;
 }
 
 .grupo-clientes__titulo--faltan {
@@ -1463,6 +1520,32 @@ body {
 
 .red-core__icono {
   font-size: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.red-core__icono .icono {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+/* Icono SVG en linea dentro de botones/filas del mapa (FEAT-002): se
+   alinea con el texto y hereda el color del contexto. */
+.red-icono {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.red-asignar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.red-vacio .red-icono .icono {
+  width: 1em;
+  height: 1em;
 }
 
 .red-core__texto {
@@ -1918,6 +2001,19 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.historial-icono {
+  display: inline-flex;
+  align-items: center;
+}
+
+.historial-icono .icono {
+  width: 1em;
+  height: 1em;
 }
 
 .historial-eliminar:hover {

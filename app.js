@@ -2081,6 +2081,22 @@
     return Array.prototype.slice.call((ctx || document).querySelectorAll(sel));
   }
 
+  /**
+   * iconoSVG(nombre, claseExtra): markup de un icono SVG de linea (FEAT-002)
+   * via el helper global window.PCC_ICONOS (sprite #pcc-iconos-sprite). Si el
+   * helper no esta cargado por algun motivo, devuelve "" para no romper el
+   * render. Se usa en el markup que genera la capa UI (encabezados de grupo,
+   * boton de tema, pausar/reanudar, filas de recibo). Los SVG salen con
+   * fill="none" + stroke="currentColor", por lo que heredan el color del
+   * tema (claro/oscuro).
+   */
+  function iconoSVG(nombre, claseExtra) {
+    if (typeof window !== "undefined" && window.PCC_ICONOS) {
+      return window.PCC_ICONOS.svg(nombre, claseExtra);
+    }
+    return "";
+  }
+
   var MESES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
@@ -2548,9 +2564,10 @@
     if (faltan.length) {
       contenedor.appendChild(
         crearEncabezadoGrupo(
-          "⚠️ Faltan por pagar (" + mesTexto + ")",
+          "Faltan por pagar (" + mesTexto + ")",
           faltan.length,
-          "grupo-clientes__titulo--faltan"
+          "grupo-clientes__titulo--faltan",
+          "alerta"
         )
       );
       faltan.forEach(function (c) {
@@ -2561,9 +2578,10 @@
     if (pagaron.length) {
       contenedor.appendChild(
         crearEncabezadoGrupo(
-          "✅ Ya pagaron (" + mesTexto + ")",
+          "Ya pagaron (" + mesTexto + ")",
           pagaron.length,
-          "grupo-clientes__titulo--pagaron"
+          "grupo-clientes__titulo--pagaron",
+          "check_circulo"
         )
       );
       pagaron.forEach(function (c) {
@@ -2573,7 +2591,7 @@
 
     if (pausados.length) {
       contenedor.appendChild(
-        crearEncabezadoGrupo("⏸️ Pausados", pausados.length, "")
+        crearEncabezadoGrupo("Pausados", pausados.length, "", "pausar")
       );
       pausados.forEach(function (c) {
         contenedor.appendChild(crearTarjeta(c, movs));
@@ -2586,10 +2604,25 @@
    * bloque de la lista de clientes ("Faltan por pagar" / "Ya pagaron") con el
    * conteo entre parentesis. Ocupa una fila completa del grid.
    */
-  function crearEncabezadoGrupo(texto, cuenta, claseExtra) {
+  function crearEncabezadoGrupo(texto, cuenta, claseExtra, icono) {
     var h = document.createElement("h3");
     h.className = "grupo-clientes__titulo " + (claseExtra || "");
-    h.textContent = texto + " · " + cuenta;
+    // Icono SVG de linea al inicio (decorativo) + texto y conteo entre
+    // "·" como antes. El texto va en su propio <span> para no mezclar el
+    // SVG con el nodo de texto.
+    var txt = texto + " · " + cuenta;
+    if (icono) {
+      h.innerHTML =
+        '<span class="grupo-clientes__icono" aria-hidden="true">' +
+        iconoSVG(icono) +
+        "</span>";
+      var etiqueta = document.createElement("span");
+      etiqueta.className = "grupo-clientes__texto";
+      etiqueta.textContent = txt;
+      h.appendChild(etiqueta);
+    } else {
+      h.textContent = txt;
+    }
     return h;
   }
 
@@ -2720,11 +2753,11 @@
     var btnPausar = $(".accion-pausar", art);
     if (btnPausar) {
       if (cliente.estatus === "Pausado") {
-        btnPausar.textContent = "▶️";
+        btnPausar.innerHTML = iconoSVG("reanudar");
         btnPausar.title = "Reanudar";
         btnPausar.setAttribute("aria-label", "Reanudar");
       } else {
-        btnPausar.textContent = "⏸️";
+        btnPausar.innerHTML = iconoSVG("pausar");
         btnPausar.title = "Pausar";
         btnPausar.setAttribute("aria-label", "Pausar");
       }
@@ -3146,14 +3179,14 @@
     var btnRecibo = document.createElement("button");
     btnRecibo.type = "button";
     btnRecibo.className = "btn btn--chip historial-ver-recibo";
-    btnRecibo.innerHTML = '<span aria-hidden="true">🧾</span> Ver recibo';
+    btnRecibo.innerHTML = '<span aria-hidden="true">' + iconoSVG("recibo") + "</span> Ver recibo";
     acciones.appendChild(btnRecibo);
 
     if (esReversible) {
       var btnRev = document.createElement("button");
       btnRev.type = "button";
       btnRev.className = "btn btn--chip btn--revertir historial-revertir";
-      btnRev.innerHTML = '<span aria-hidden="true">↩️</span> Revertir';
+      btnRev.innerHTML = '<span aria-hidden="true">' + iconoSVG("revertir") + "</span> Revertir";
       acciones.appendChild(btnRev);
     }
 
@@ -3631,7 +3664,8 @@
     var icono = $("#btn-tema-icono");
     if (icono) {
       // En modo oscuro mostramos el sol (para volver a claro) y viceversa.
-      icono.textContent = tema === "oscuro" ? "☀️" : "🌙";
+      // Iconos SVG de linea (FEAT-002); #btn-tema-icono se conserva.
+      icono.innerHTML = iconoSVG(tema === "oscuro" ? "sol" : "luna");
     }
   }
 

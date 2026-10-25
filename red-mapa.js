@@ -19,7 +19,8 @@
 
    ASIGNAR/LIGAR DESDE EL MAPA:
      - Cada AP, cada enlace PtP y la seccion de modems traen un boton
-       "➕ Asignar cliente" que abre un mini-modal (patron .modal) con un
+       "Asignar cliente" (con icono SVG) que abre un mini-modal (patron
+       .modal) con un
        <select> de los clientes pendientes (clientesSinAsignar) y un input de
        IP. Al confirmar se setea ip/tipoConexion/apId en el cliente elegido, se
        guarda con PCC.guardarClientes (firebase-sync lo propaga a Firestore) y
@@ -298,6 +299,38 @@
     return el;
   }
 
+  /**
+   * iconoSVG(nombre, claseExtra): markup de un icono SVG de linea (FEAT-002)
+   * via el helper global window.PCC_ICONOS (sprite #pcc-iconos-sprite). Si no
+   * esta cargado, devuelve "" para no romper el render del mapa.
+   */
+  function iconoSVG(nombre, claseExtra) {
+    if (window.PCC_ICONOS) {
+      return window.PCC_ICONOS.svg(nombre, claseExtra);
+    }
+    return "";
+  }
+
+  /**
+   * crearElIcono(tag, clase, iconoNombre, texto): como crearEl pero antepone
+   * un icono SVG de linea (via innerHTML) y, si hay texto, lo agrega en un
+   * <span> aparte. Para botones/filas del mapa que antes usaban un emoji.
+   */
+  function crearElIcono(tag, clase, iconoNombre, texto) {
+    var el = document.createElement(tag);
+    if (clase) {
+      el.className = clase;
+    }
+    el.innerHTML =
+      '<span class="red-icono" aria-hidden="true">' + iconoSVG(iconoNombre) + "</span>";
+    if (texto != null) {
+      var span = document.createElement("span");
+      span.textContent = texto;
+      el.appendChild(span);
+    }
+    return el;
+  }
+
   function obtenerPCC() {
     return window.PCC || null;
   }
@@ -392,7 +425,8 @@
 
     var cab = crearEl("div", "modal__cabecera");
     cab.appendChild(crearEl("h2", "modal__titulo", "Asignar cliente"));
-    var cerrar = crearEl("button", "btn btn--icono", "✕");
+    var cerrar = crearEl("button", "btn btn--icono");
+    cerrar.innerHTML = iconoSVG("cerrar");
     cerrar.type = "button";
     cerrar.setAttribute("aria-label", "Cerrar");
     cerrar.addEventListener("click", cerrarModalAsignar);
@@ -408,10 +442,11 @@
     ));
 
     if (!pendientes.length) {
-      cuerpo.appendChild(crearEl(
+      cuerpo.appendChild(crearElIcono(
         "p",
         "red-vacio",
-        "No hay clientes pendientes por ligar. Todos tus clientes ya tienen IP asignada 🎉"
+        "celebracion",
+        "No hay clientes pendientes por ligar. Todos tus clientes ya tienen IP asignada."
       ));
       var accionesVacio = crearEl("div", "modal__acciones");
       var cancelarV = crearEl("button", "btn btn--secundario", "Cerrar");
@@ -550,9 +585,11 @@
     return true;
   }
 
-  // Boton "➕ Asignar cliente" reutilizable para cabeceras de seccion/tarjeta.
+  // Boton "Asignar cliente" (icono + texto) reutilizable para cabeceras de
+  // seccion/tarjeta. El icono SVG de linea (FEAT-002) reemplaza al emoji de
+  // "mas" que se usaba antes.
   function botonAsignar(destino) {
-    var btn = crearEl("button", "red-asignar-btn", "➕ Asignar cliente");
+    var btn = crearElIcono("button", "red-asignar-btn", "mas", "Asignar cliente");
     btn.type = "button";
     btn.addEventListener("click", function (ev) {
       ev.preventDefault();
@@ -657,7 +694,10 @@
     if (core.ip) {
       tarjetaCore.setAttribute("data-ip", core.ip);
     }
-    tarjetaCore.appendChild(crearEl("span", "red-core__icono", "📡"));
+    var coreIcono = crearEl("span", "red-core__icono");
+    coreIcono.setAttribute("aria-hidden", "true");
+    coreIcono.innerHTML = iconoSVG("core");
+    tarjetaCore.appendChild(coreIcono);
     var coreTxt = crearEl("div", "red-core__texto");
     coreTxt.appendChild(crearEl("span", "red-core__titulo", core.nombre || "Core"));
     coreTxt.appendChild(crearEl("span", "red-core__sub", "RouterOS · red 192.168.10.0/24"));
@@ -802,7 +842,7 @@
       }));
     });
     if (!pendInfra.length && !clasif.pendientes.length) {
-      cuerpoPend.appendChild(crearEl("p", "red-vacio", "Todo identificado 🎉"));
+      cuerpoPend.appendChild(crearElIcono("p", "red-vacio", "celebracion", "Todo identificado"));
     }
     tarjetaPend.appendChild(cuerpoPend);
     capa.appendChild(tarjetaPend);
