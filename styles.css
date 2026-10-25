@@ -2858,3 +2858,43 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
     display: none !important;
   }
 }
+
+/* ============================================================
+   Ocultar el badge flotante "Powered by Netlify" (plan gratuito)
+   ------------------------------------------------------------
+   NOTA (defensivo): este badge NO esta en el codigo de este repo;
+   lo INYECTA Netlify en el sitio desplegado, asi que aqui no hay
+   un elemento concreto al que apuntar. Por eso las reglas de abajo
+   son defensivas y usan SELECTORES ESPECIFICOS y PLAUSIBLES del
+   badge (su id/clase tipicos y los anchors/iframes FIJOS que
+   apuntan a netlify.com). A proposito NO se usa un selector amplio
+   del tipo "* { display:none }" para no ocultar contenido propio.
+   Si el badge persiste pese a esto, se quita desde la configuracion
+   de Netlify (o cambiando de plan), porque no vive en el repositorio.
+   ============================================================ */
+
+/* Ids y clases tipicos del badge de Netlify. */
+#netlify-badge,
+.netlify-badge,
+#netlify-badge-container,
+.netlify-badge-container,
+[id^="netlify-badge"],
+[class^="netlify-badge"],
+[class*=" netlify-badge"],
+[data-netlify-badge] {
+  display: none !important;
+}
+
+/* Anchors/iframes FIJOS (esquina) que apuntan a netlify.com: el badge
+   gratuito suele ser un enlace o iframe posicionado en una esquina de
+   la ventana. Limitamos a position:fixed para NO tocar los enlaces a
+   Netlify que aparezcan dentro del contenido normal (p. ej. el README
+   renderizado o textos de ayuda). */
+a[href*="netlify.com"][style*="position: fixed"],
+a[href*="netlify.com"][style*="position:fixed"],
+iframe[src*="netlify.com"][style*="position: fixed"],
+iframe[src*="netlify.com"][style*="position:fixed"],
+a[href*="app.netlify.com"][style*="position: fixed"],
+a[href*="app.netlify.com"][style*="position:fixed"] {
+  display: none !important;
+}

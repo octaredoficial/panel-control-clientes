@@ -100,6 +100,39 @@ Como toque final la interfaz usa detalles al estilo de iOS, todos con CSS y **si
 
 Verificación a mano: el texto se ve con la fuente del sistema, el título del encabezado destaca, al pulsar un botón hay un leve encogido, y con *reducir movimiento* activado nada se anima. El bloque de impresión del recibo (`@media print`) **no cambia**.
 
+### Pulido visual estilo iOS (resumen de todos los cambios)
+
+Como fase de **pulido visual**, la interfaz se afinó para sentirse como una app de iPhone, **todo con CSS/HTML y JS mínimo** (cero recursos remotos, cero frameworks). Estos son los cambios y las decisiones de diseño:
+
+- **Header limpio en móvil:** en el teléfono el encabezado ya **no amontona** la maraña de botones. Las acciones del header se **ocultan en móvil** y se mueven a la **barra de navegación inferior** (`#nav-*`) y a la **hoja "Más"** (bottom sheet). Así arriba queda solo el título y una vista despejada. **Decisión desktop vs móvil:** en **escritorio se conservan** las acciones en el header (hay espacio de sobra), mientras que en **móvil se ocultan** y se accede a ellas por la barra inferior y la hoja "Más". Importante: los botones del header **siguen en el DOM con sus `id` y listeners** aunque estén ocultos en móvil, porque la barra inferior los reutiliza (hace `click()` sobre ellos); no se eliminaron, solo se ocultan visualmente.
+- **Iconos SVG de línea en vez de emojis:** las acciones que antes se mostraban con **emojis** ahora usan **iconos SVG de línea** (trazo fino, `fill="none"` + `stroke="currentColor"`, así heredan el color del tema y se ven bien en **claro y oscuro**). Esto aplica a las acciones de tarjeta y del header: **Pagar** (antes ✔️), **Avisar** (antes 💬), **Historial** (antes 📜), **Red** (antes 🗺️), **Historial de meses** (antes 📊), **Configuración** (antes ⚙️), **tema claro/oscuro** (antes 🌙/☀️), etc. Cada icono conserva su **`aria-label`/`title`** para no perder accesibilidad, y el botón de tema **sigue alternando** su icono según el modo.
+- **Tarjetas sutiles:** las tarjetas de cliente se suavizaron al estilo iOS (bordes y sombras más discretos, más aire interno, jerarquía tipográfica clara) sin cambiar la información que muestran.
+- **Menú "•••" en las tarjetas:** las acciones secundarias de cada tarjeta (por ejemplo **editar / pausar / eliminar**) se agrupan detrás de un menú de **tres puntos (•••)** para no saturar la tarjeta; las acciones principales (Pagar, Avisar, Historial) siguen visibles.
+- **Large title + animaciones + fuente del sistema:** el encabezado usa un **large title** prominente, hay **transiciones suaves** y un leve **`press`** al tocar (`scale(0.98)` en `:active`), y el texto usa la **fuente del sistema** de Apple (San Francisco en iPhone/Mac). Todo respeta **`prefers-reduced-motion`** (ver [Pulido final estilo iOS](#pulido-final-estilo-ios-fuente-del-sistema-large-title-y-animaciones)).
+
+> **Donde este README describe acciones con emojis** (por ejemplo **✔️ Pagar**, **💬 Avisar**, **📜 Historial**, **🗺️ Red**, **📊 Historial**, **⚙️ Configuración** o **🌙/☀️** del tema), ten en cuenta que en la interfaz actual esos emojis se muestran como **iconos SVG de línea**. Los emojis se conservan en el texto solo como **referencia visual rápida** de a qué acción corresponde cada icono.
+
+### Nota sobre el badge "Powered by Netlify"
+
+En el plan gratuito, **Netlify inyecta un badge flotante "Powered by Netlify"** en una esquina del sitio desplegado. Ese badge **NO está en el código de este repositorio** (no hay ningún elemento nuestro que lo pinte), así que:
+
+- Se **intenta ocultar por CSS** con reglas **defensivas y específicas** en `styles.css`, apuntando a los **id/clase típicos** del badge (`#netlify-badge`, `.netlify-badge`, etc.) y a los **anchors/iframes fijos** que apuntan a `netlify.com`. Se usaron selectores específicos **a propósito**, para **no ocultar contenido propio** (nada de un `* { display:none }` amplio).
+- **Si el badge persiste** pese a esas reglas (porque Netlify puede cambiar su marcado), se quita desde la **configuración de Netlify** o **cambiando de plan**, ya que **no vive en el repositorio** y no podemos garantizar ocultarlo solo con CSS.
+- `netlify.toml` **no se tocó**: la publicación del sitio sigue igual (sitio estático, sin build, publicando la raíz).
+
+### Verificación manual del pulido visual (para Octavio, en el iPhone)
+
+Como no hay navegador en el entorno de pruebas, esto se comprueba **a mano en el iPhone** (abre el sitio de Netlify, **https://ornate-melba-f303fc.netlify.app**, e inicia sesión):
+
+1. **Header limpio:** arriba debe verse **despejado**, sin la **maraña de botones** de antes; solo el título y una vista limpia.
+2. **Navegación por la barra inferior:** usa la **barra inferior** (Inicio / Red / Historial / Acciones) y abre la **hoja "Más"**; confirma que desde ahí llegas a Nuevo Cliente, Nuevo Ahorro, Nuevo Gasto, Configuración, el **cambio de tema** y **Cerrar sesión**.
+3. **Tarjetas sutiles:** revisa que las tarjetas de cliente se ven **suaves y ordenadas** (bordes/sombras discretos, buena legibilidad).
+4. **Iconos de línea en vez de emojis:** confirma que las acciones (**Pagar, Avisar, Historial, Red, Configuración, tema…**) se muestran con **iconos de línea**, no con emojis.
+5. **Menú "•••" en una tarjeta:** toca el menú de **tres puntos** de una tarjeta y verifica que aparecen las acciones secundarias (editar / pausar / eliminar).
+6. **Animaciones al tocar:** al pulsar un botón o una tarjeta debe notarse un leve **`press`** (encogido suave); con *reducir movimiento* activado, nada se anima.
+7. **Claro/oscuro:** alterna el **tema** y confirma que iconos, tarjetas, barra inferior y hojas respetan el color en ambos modos.
+8. **Badge de Netlify:** comprueba si el **badge "Powered by Netlify"** **desapareció**. Si **sigue apareciendo**, quítalo desde la **configuración de Netlify** o **cambiando de plan** (no está en el código del repo; ver [Nota sobre el badge "Powered by Netlify"](#nota-sobre-el-badge-powered-by-netlify)).
+
 ### Verificación manual del Historial de pagos y Recibos
 
 Para esta funcionalidad (ver [Historial de pagos y Recibos](#historial-de-pagos-y-recibos)), comprueba a mano en el navegador:
