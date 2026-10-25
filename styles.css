@@ -76,9 +76,13 @@ ul, ol {
   /* Formas y profundidad */
   --radio: 16px;
   --radio-sm: 10px;
+  --radio-grande: 18px;     /* tarjetas/paneles estilo iOS (mas redondeado) */
   --radio-chip: 999px;
   --sombra: 0 1px 2px rgba(16, 24, 40, 0.04),
             0 4px 16px rgba(16, 24, 40, 0.06);
+  /* Sombra muy tenue para tarjetas sutiles (apenas separa del fondo) */
+  --sombra-suave: 0 1px 2px rgba(16, 24, 40, 0.03),
+                  0 2px 10px rgba(16, 24, 40, 0.04);
   --sombra-modal: 0 10px 40px rgba(16, 24, 40, 0.25);
 
   --espacio: 20px;
@@ -114,7 +118,11 @@ ul, ol {
 
   --sombra: 0 1px 2px rgba(0, 0, 0, 0.3),
             0 4px 18px rgba(0, 0, 0, 0.4);
+  /* Sombra muy tenue para tarjetas sutiles (modo oscuro) */
+  --sombra-suave: 0 1px 2px rgba(0, 0, 0, 0.25),
+                  0 2px 12px rgba(0, 0, 0, 0.3);
   --sombra-modal: 0 10px 50px rgba(0, 0, 0, 0.6);
+  /* --radio-grande hereda de :root (mismo valor en ambos temas) */
 }
 
 /* ---------------------- Base ------------------------------ */
@@ -399,22 +407,28 @@ body {
 .metrica {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 16px;
-  border-radius: var(--radio-sm);
+  gap: 8px;
+  padding: 18px 20px;
+  border-radius: var(--radio-grande);
   background: var(--superficie-2);
-  border: 1px solid var(--borde);
+  /* Borde casi imperceptible: la tarjeta se diferencia por el fondo
+     (--superficie-2) y una sombra muy tenue, estilo iOS. */
+  border: 1px solid transparent;
+  box-shadow: var(--sombra-suave);
 }
 
 .metrica__etiqueta {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  font-weight: 500;
   color: var(--texto-suave);
+  letter-spacing: 0.01em;
 }
 
 .metrica__valor {
-  font-size: 1.45rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .metrica--ingreso .metrica__valor { color: var(--verde); }
@@ -747,12 +761,15 @@ body {
 
 .tarjeta {
   background: var(--superficie);
+  /* Borde muy tenue (apenas una linea); la separacion real la da la
+     sombra suave y el fondo --superficie sobre --fondo. Estilo iOS. */
   border: 1px solid var(--borde);
-  border-radius: var(--radio-sm);
-  padding: 16px;
+  border-radius: var(--radio-grande);
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  box-shadow: var(--sombra-suave);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
@@ -784,12 +801,14 @@ body {
 }
 
 .tarjeta__nombre {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .tarjeta__megas {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  font-weight: 500;
   color: var(--texto-suave);
 }
 
@@ -798,14 +817,15 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 14px;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   color: var(--texto-suave);
 }
 
 .tarjeta__monto {
-  font-weight: 700;
+  font-weight: 800;
   color: var(--texto);
-  font-size: 1rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
 }
 
 .etiqueta-tipo {
