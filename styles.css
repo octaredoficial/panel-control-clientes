@@ -2144,6 +2144,19 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
   .app {
     padding-bottom: calc(var(--nav-inferior-alto) + 24px + env(safe-area-inset-bottom));
   }
+
+  /* ---- Header limpio en movil (acciones -> barra inferior) ----
+     En movil/tablet las acciones del header viven en la barra inferior
+     #nav-* y en la hoja "Mas" #hoja-*; por eso aqui se oculta VISUALMENTE
+     el contenedor .header__acciones (los 8 botones #btn-*), dejando arriba
+     solo el titulo y el subtitulo estilo app.
+     CRITICO: los botones #btn-* NO se eliminan del DOM: nav-movil.js dispara
+     su .click() (y app.js mantiene sus listeners), por eso solo se ocultan
+     con display:none. En escritorio (ancho mayor) la barra inferior esta
+     oculta y estas acciones del header se conservan tal cual. */
+  .header__acciones {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2160,17 +2173,23 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
     min-height: var(--toque-min);
   }
 
+  /* El header ya solo muestra titulo + subtitulo en movil (sus acciones se
+     ocultan desde el breakpoint de 860px, donde aparece la barra inferior).
+     Se apila por si el titulo necesita respirar en anchos muy chicos. */
   .header {
     flex-direction: column;
+    gap: 4px;
+    margin-bottom: 20px;
   }
 
-  .header__acciones {
-    width: 100%;
+  /* Jerarquia tipo app: titulo mas prominente y subtitulo discreto.
+     (El large title definitivo llega en una feature posterior.) */
+  .header__titulo {
+    font-size: 1.9rem;
   }
 
-  .header__acciones .btn {
-    flex: 1 1 auto;
-    justify-content: center;
+  .header__subtitulo {
+    font-size: 0.9rem;
   }
 
   .metricas,
