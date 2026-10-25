@@ -383,6 +383,32 @@
     <footer class="pie">
       <p>Panel de Control de Clientes · Tus datos se sincronizan en la nube con Firebase tras iniciar sesión.</p>
     </footer>
+
+    <!-- ================= BARRA DE NAVEGACIÓN INFERIOR (tipo app, solo móvil) =================
+      FEAT-002. Barra fija inferior (bottom tab bar) visible SOLO en móvil
+      (styles.css la oculta en escritorio). NO duplica lógica: nav-movil.js
+      cablea cada botón para disparar el click del botón homólogo que ya
+      tiene su handler (#btn-red en red-mapa.js, #btn-historial en
+      historial.js, etc.). IDs propios (#nav-*) para no colisionar con el
+      header. El botón "Más" abre la hoja de acciones (#hoja-acciones). -->
+    <nav class="nav-inferior" id="nav-inferior" aria-label="Navegación principal">
+      <button type="button" id="nav-inicio" class="nav-inferior__item" aria-label="Ir al inicio">
+        <span class="nav-inferior__icono" aria-hidden="true">🏠</span>
+        <span class="nav-inferior__texto">Inicio</span>
+      </button>
+      <button type="button" id="nav-red" class="nav-inferior__item" aria-label="Ver el mapa de la red" aria-pressed="false">
+        <span class="nav-inferior__icono" aria-hidden="true">🗺️</span>
+        <span class="nav-inferior__texto">Red</span>
+      </button>
+      <button type="button" id="nav-historial" class="nav-inferior__item" aria-label="Ver el historial de meses" aria-pressed="false">
+        <span class="nav-inferior__icono" aria-hidden="true">📊</span>
+        <span class="nav-inferior__texto">Historial</span>
+      </button>
+      <button type="button" id="nav-mas" class="nav-inferior__item nav-inferior__item--mas" aria-label="Más acciones" aria-haspopup="true" aria-expanded="false">
+        <span class="nav-inferior__icono" aria-hidden="true">➕</span>
+        <span class="nav-inferior__texto">Más</span>
+      </button>
+    </nav>
   </div>
 
   <!-- ================= OVERLAY DE INICIO DE SESIÓN ================= -->
@@ -406,6 +432,47 @@
         </button>
       </div>
       <p class="login__error" id="login-error" hidden></p>
+    </div>
+  </div>
+
+  <!-- ================= HOJA DE ACCIONES (action sheet, tipo app) =================
+    FEAT-002. Hoja inferior que abre el botón "Más" (#nav-mas) de la barra
+    de navegación en móvil. Agrupa las acciones secundarias del header.
+    Oculta por defecto ([hidden]). nav-movil.js conecta cada botón para
+    disparar el click del botón homólogo del header (no duplica lógica) y
+    luego cierra la hoja. IDs propios (#hoja-*) para no colisionar. -->
+  <div class="hoja-acciones" id="hoja-acciones" hidden>
+    <div class="hoja-acciones__overlay" data-cerrar-hoja></div>
+    <div class="hoja-acciones__panel" role="dialog" aria-modal="true" aria-label="Más acciones">
+      <div class="hoja-acciones__tirador" aria-hidden="true"></div>
+      <h2 class="hoja-acciones__titulo">Más acciones</h2>
+      <div class="hoja-acciones__lista">
+        <button type="button" id="hoja-nuevo-cliente" class="hoja-acciones__btn">
+          <span class="hoja-acciones__btn-icono" aria-hidden="true">➕</span>
+          <span>Nuevo Cliente</span>
+        </button>
+        <button type="button" id="hoja-nuevo-gasto" class="hoja-acciones__btn">
+          <span class="hoja-acciones__btn-icono" aria-hidden="true">➖</span>
+          <span>Nuevo Gasto</span>
+        </button>
+        <button type="button" id="hoja-nuevo-ahorro" class="hoja-acciones__btn">
+          <span class="hoja-acciones__btn-icono" aria-hidden="true">🐷</span>
+          <span>Nuevo Ahorro</span>
+        </button>
+        <button type="button" id="hoja-config" class="hoja-acciones__btn">
+          <span class="hoja-acciones__btn-icono" aria-hidden="true">⚙️</span>
+          <span>Configuración</span>
+        </button>
+        <button type="button" id="hoja-tema" class="hoja-acciones__btn">
+          <span class="hoja-acciones__btn-icono" aria-hidden="true">🌓</span>
+          <span>Cambiar tema</span>
+        </button>
+        <button type="button" id="hoja-logout" class="hoja-acciones__btn hoja-acciones__btn--peligro">
+          <span class="hoja-acciones__btn-icono" aria-hidden="true">🚪</span>
+          <span>Cerrar sesión</span>
+        </button>
+      </div>
+      <button type="button" id="hoja-cerrar" class="hoja-acciones__cerrar">Cerrar</button>
     </div>
   </div>
 
@@ -940,6 +1007,12 @@
        se carga despues de red-mapa.js y antes de firebase-sync.js (defer
        preserva el orden). Se autoprotege si no hay document (arnes/node). -->
   <script src="historial.js" defer></script>
+  <!-- Barra de navegacion inferior "tipo app" (FEAT-002). Debe cargarse
+       DESPUES de app.js/red-mapa.js/historial.js para que window.PCC exista
+       y los listeners de #btn-red/#btn-historial ya esten enganchados; solo
+       dispara el click de los botones existentes (no duplica logica). Se
+       autoprotege si no hay document (arnes/node). -->
+  <script src="nav-movil.js" defer></script>
   <!-- Modulo de sincronizacion con Firebase (Auth + Firestore). Solo se
        ejecuta en el navegador; se carga desde el CDN gstatic. -->
   <script type="module" src="firebase-sync.js"></script>

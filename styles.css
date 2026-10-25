@@ -1897,16 +1897,222 @@ table.historial-tabla tbody tr:last-child td {
   text-align: center;
 }
 
+/* ====================================================================
+   Barra de navegacion inferior "tipo app" (FEAT-002)
+   --------------------------------------------------------------------
+   Bottom tab bar fija, visible SOLO en movil (se activa en las media
+   queries de abajo). Por defecto (escritorio) queda oculta; el header
+   superior sigue siendo la navegacion. La hoja de acciones (action
+   sheet) tambien vive aqui. Todo con variables de la paleta -> funciona
+   en claro y oscuro. z-index por debajo de modales (1000) y login
+   (2000) pero por encima del contenido. */
+.nav-inferior {
+  display: none; /* Oculta en escritorio; se muestra en movil. */
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  background: var(--superficie);
+  border-top: 1px solid var(--borde);
+  box-shadow: 0 -2px 10px rgba(16, 24, 40, 0.06);
+  /* Respeta la barra de gestos del iPhone (safe area). */
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+
+.nav-inferior__item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--toque-min);
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 10px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.nav-inferior__item:hover {
+  color: var(--texto);
+}
+
+.nav-inferior__icono {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.nav-inferior__texto {
+  line-height: 1;
+}
+
+/* Estado activo: refleja la vista actual (lo marca nav-movil.js). */
+.nav-inferior__item--activo {
+  color: var(--acento);
+  background: var(--acento-suave);
+}
+
+.nav-inferior__item:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+/* ---------------------- Hoja de acciones (action sheet) --------------
+   Hoja inferior tipo app que abre el boton "Mas" de la barra. Se desliza
+   desde abajo, ocupa todo el ancho y respeta la safe area. z-index por
+   encima de la barra inferior (900) y por debajo del login (2000), al
+   nivel de los modales (1000). */
+.hoja-acciones {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.hoja-acciones[hidden] {
+  display: none;
+}
+
+.hoja-acciones__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 24, 40, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.hoja-acciones__panel {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio) var(--radio) 0 0;
+  box-shadow: var(--sombra-modal);
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: hoja-subir 0.2s ease;
+}
+
+@keyframes hoja-subir {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.hoja-acciones__tirador {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--borde-fuerte);
+  margin: 2px auto 10px;
+}
+
+.hoja-acciones__titulo {
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.hoja-acciones__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hoja-acciones__btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--toque-min);
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.hoja-acciones__btn:hover {
+  border-color: var(--borde-fuerte);
+}
+
+.hoja-acciones__btn:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.hoja-acciones__btn-icono {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.hoja-acciones__btn--peligro {
+  color: var(--rojo);
+}
+
+.hoja-acciones__cerrar {
+  display: block;
+  width: 100%;
+  min-height: var(--toque-min);
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hoja-acciones__cerrar:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
+}
+
 /* ---------------------- Responsive ------------------------ */
 @media (max-width: 860px) {
   .metricas {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  /* Mostrar la barra de navegacion inferior "tipo app" en movil/tablet. */
+  .nav-inferior {
+    display: flex;
+  }
+
+  /* Dejar espacio para que la barra fija no tape el footer ni el ultimo
+     panel. Alto de la barra + safe area del iPhone. */
+  .app {
+    padding-bottom: calc(var(--nav-inferior-alto) + 24px + env(safe-area-inset-bottom));
+  }
 }
 
 @media (max-width: 640px) {
   .app {
-    padding: 18px 14px 48px;
+    padding: 18px 14px calc(var(--nav-inferior-alto) + 24px + env(safe-area-inset-bottom));
   }
 
   /* Area de toque comoda para el dedo en movil (no afecta a escritorio):
