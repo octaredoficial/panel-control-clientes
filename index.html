@@ -370,18 +370,83 @@
         </div>
       </section>
 
-      <!-- ================= REPARTO DE FIN DE MES ================= -->
-      <section class="panel panel--reparto" aria-labelledby="reparto-titulo">
+      <!-- ================= REPARTO PREVISTO DEL MES ================= -->
+      <!-- Panel VISIBLE desde el inicio (no colapsado): muestra cuanto le toca
+           a cada socio calculado sobre la FACTURACION TOTAL del mes (lo que
+           entraria si TODOS pagan), aunque aun no se haya cobrado. Es lo que
+           Octavio le muestra a su socio Carlos. Reutiliza la estetica del
+           reparto real para coherencia visual. Usa el mes seleccionado (la luz
+           bimestral depende del mes) pero la facturacion es el padron actual. -->
+      <section class="panel panel--reparto panel--previsto" aria-labelledby="previsto-titulo">
         <div class="panel__cabecera">
-          <!-- Punto 4 (paquete 0-6): el mes pasa de "( Octubre de 2026 )" en la
-               misma linea a un SUBTITULO debajo del titulo. Se CONSERVA el id
-               #reparto-mes (app.js lo actualiza); solo cambia su envoltura. -->
-          <hgroup class="panel__titulo-grupo" id="reparto-titulo">
-            <h2 class="panel__titulo">Reparto de fin de mes</h2>
-            <p class="panel__subtitulo"><span id="reparto-mes">Mes de Año</span></p>
+          <hgroup class="panel__titulo-grupo" id="previsto-titulo">
+            <h2 class="panel__titulo">Reparto previsto del mes</h2>
+            <p class="panel__subtitulo"><span id="previsto-mes">Mes de Año</span></p>
           </hgroup>
-          <span class="panel__nota" title="Los ingresos del reparto se basan en los pagos cobrados de clientes (botón Pagar) con fecha en el mes seleccionado, no en los ingresos manuales.">según pagos cobrados</span>
+          <span class="panel__nota panel__nota--previsto" title="Cálculo sobre la facturación total del mes: lo que le toca a cada socio si TODOS los clientes activos pagan su cuota, aunque aún no se haya cobrado. La facturación usa el padrón actual de clientes activos.">previsto · si todos pagan este mes</span>
         </div>
+
+        <ul class="reparto__desglose">
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">Facturación total del mes</span>
+            <span class="reparto__valor" id="previsto-facturacion">$0.00</span>
+          </li>
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">− Gastos fijos (Starlink + luz)
+              <span class="reparto__nota" id="previsto-gastos-nota">Sin luz este mes</span>
+            </span>
+            <span class="reparto__valor reparto__valor--resta" id="previsto-gastos">$0.00</span>
+          </li>
+          <li class="reparto__item">
+            <span class="reparto__etiqueta">− Pagos directos a Octavio</span>
+            <span class="reparto__valor reparto__valor--resta" id="previsto-octavio">$0.00</span>
+          </li>
+          <li class="reparto__item reparto__item--total">
+            <span class="reparto__etiqueta">Ganancia prevista a repartir</span>
+            <span class="reparto__valor" id="previsto-ganancia">$0.00</span>
+          </li>
+          <li class="reparto__item reparto__item--mitad">
+            <span class="reparto__etiqueta">Mitad por socio</span>
+            <span class="reparto__valor" id="previsto-mitad">$0.00</span>
+          </li>
+        </ul>
+
+        <div class="reparto__totales">
+          <article class="reparto__socio reparto__socio--carlos">
+            <span class="reparto__socio-etiqueta">Total Carlos (previsto)</span>
+            <span class="reparto__socio-valor" id="previsto-carlos">$0.00</span>
+            <span class="reparto__socio-nota">su mitad del reparto</span>
+          </article>
+          <article class="reparto__socio reparto__socio--octavio">
+            <span class="reparto__socio-etiqueta">Total Octavio (previsto)</span>
+            <span class="reparto__socio-valor" id="previsto-octavio-total">$0.00</span>
+            <span class="reparto__socio-nota">su mitad menos sus pagos directos</span>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= REPARTO DE FIN DE MES (COBRADO) ================= -->
+      <!-- El reparto REAL (segun pagos ya cobrados) es informativo/control
+           interno: queda COLAPSADO por defecto (details SIN atributo open). El
+           <summary> hace de cabecera del panel; sus nodos internos (montos,
+           #reparto-mes, totales) siguen en el DOM y los actualiza renderReparto
+           aunque el details este cerrado. -->
+      <section class="panel panel--reparto" aria-labelledby="reparto-titulo">
+        <details class="reparto-cobrado">
+          <summary class="reparto-cobrado__resumen">
+            <div class="panel__cabecera reparto-cobrado__cabecera">
+              <!-- Punto 4 (paquete 0-6): el mes pasa de "( Octubre de 2026 )" en la
+                   misma linea a un SUBTITULO debajo del titulo. Se CONSERVA el id
+                   #reparto-mes (app.js lo actualiza); solo cambia su envoltura. -->
+              <hgroup class="panel__titulo-grupo" id="reparto-titulo">
+                <h2 class="panel__titulo">Reparto de fin de mes</h2>
+                <p class="panel__subtitulo"><span id="reparto-mes">Mes de Año</span></p>
+              </hgroup>
+              <span class="panel__nota" title="Los ingresos del reparto se basan en los pagos cobrados de clientes (botón Pagar) con fecha en el mes seleccionado, no en los ingresos manuales.">según pagos cobrados</span>
+            </div>
+          </summary>
+
+          <div class="reparto-cobrado__cuerpo">
 
         <ul class="reparto__desglose">
           <li class="reparto__item">
@@ -424,6 +489,9 @@
             <span class="reparto__socio-nota">su mitad menos lo que ya cobró directo</span>
           </article>
         </div>
+
+          </div>
+        </details>
       </section>
 
       <!-- ================= ESTADISTICAS ================= -->

@@ -910,6 +910,69 @@
     };
   }
 
+  /**
+   * calcularRepartoPrevisto(fecha, clientes, cfg): reparto PREVISTO del mes.
+   *
+   * Misma logica/formula que calcularReparto, pero en vez de partir de los
+   * pagos COBRADOS parte de la FACTURACION TOTAL del mes (lo que entraria si
+   * TODOS los clientes activos pagaran su cuota). Sirve para mostrarle al
+   * socio cuanto le toca "aunque todavia no se haya cobrado".
+   *
+   *   facturacion      = facturacionTotalMensual(clientes) (cuotas de Activos)
+   *   gastosFijos      = Starlink + Luz (si aplica el mes de 'fecha')
+   *   pagosOctavio     = suma de cuotas (monto) de Activos con socio 'Octavio'
+   *   gananciaPrevista = facturacion − gastosFijos − pagosOctavio
+   *   mitad            = gananciaPrevista / 2
+   *   totalCarlos      = su mitad
+   *   totalOctavio     = su mitad − sus pagos directos (los ya "cobra" directo)
+   *
+   * NOTA: la facturacion y los pagos directos de Octavio usan el PADRON
+   * ACTUAL de clientes (las cuotas son fijas, no dependen del mes). Solo los
+   * gastos fijos (luz bimestral) dependen del mes navegado. Reutiliza
+   * facturacionTotalMensual y gastosFijosDelMes SIN cambiar la formula.
+   * Es puro: no muta nada ni toca el DOM/persistencia.
+   *
+   * @param {Date|string|number} fecha  mes seleccionado (para la luz)
+   * @param {Array<Object>} clientes    padron actual
+   * @param {Object} [cfg]
+   * @returns {Object}
+   */
+  function calcularRepartoPrevisto(fecha, clientes, cfg) {
+    cfg = cfg || cargarConfig();
+    var ref = aFecha(fecha);
+    clientes = Array.isArray(clientes) ? clientes : [];
+
+    var facturacion = facturacionTotalMensual(clientes);
+
+    // Pago(s) directo(s) PREVISTO(s) de Octavio: suma de las cuotas (monto)
+    // de los clientes Activos cuyo socio es 'Octavio'. Es sobre facturacion
+    // (lo que deberia cobrar este mes), no sobre lo ya cobrado.
+    var pagosOctavioPrevisto = 0;
+    for (var i = 0; i < clientes.length; i++) {
+      var c = clientes[i];
+      if (c && c.estatus === "Activo" && c.socio === "Octavio") {
+        pagosOctavioPrevisto += Number(c.monto) || 0;
+      }
+    }
+
+    var gastos = gastosFijosDelMes(ref, cfg);
+    var gananciaPrevista = facturacion - gastos.total - pagosOctavioPrevisto;
+    var mitad = gananciaPrevista / 2;
+
+    return {
+      facturacion: facturacion,
+      starlink: gastos.starlink,
+      luz: gastos.luz,
+      gastosFijos: gastos.total,
+      pagosOctavioPrevisto: pagosOctavioPrevisto,
+      gananciaPrevista: gananciaPrevista,
+      mitad: mitad,
+      totalCarlos: mitad,
+      totalOctavio: mitad - pagosOctavioPrevisto,
+      luzAplica: luzAplicaEnMes(ref, cfg)
+    };
+  }
+
   /* ----------------------------------------------------------
      6.b.bis HISTORIAL DE MESES (logica pura, testeable)
      ------------------------------------------------------------
@@ -1991,6 +2054,7 @@
     luzAplicaEnMes: luzAplicaEnMes,
     gastosFijosDelMes: gastosFijosDelMes,
     calcularReparto: calcularReparto,
+    calcularRepartoPrevisto: calcularRepartoPrevisto,
 
     // Historial de meses (logica pura; la UI la consume en FEAT-002)
     resumenMensual: resumenMensual,
@@ -2209,6 +2273,7 @@
     var cfg = PCC.cargarConfig();
 
     renderResumen(lista, movs);
+    renderPrevisto(lista, cfg);
     renderReparto(lista, movs, cfg);
     renderEstadisticas(lista, movs);
     renderPagos(lista, movs);
@@ -2279,6 +2344,37 @@
     setTexto("#metrica-ganancia", PCC.formatoMoneda(ganancia));
     setTexto("#metrica-porcobrar", PCC.formatoMoneda(porCobrar));
     setTexto("#metrica-facturacion", PCC.formatoMoneda(facturacion));
+  }
+
+  /* ---------------------- Reparto PREVISTO del mes ---------- */
+  // Panel visible desde el inicio: cuanto le toca a cada socio sobre la
+  // FACTURACION total del mes (si todos pagan), reutilizando la formula del
+  // reparto real via PCC.calcularRepartoPrevisto. La facturacion usa el padron
+  // actual de clientes; la luz depende del mes seleccionado.
+  function renderPrevisto(lista, cfg) {
+    var mes = estado.mesSeleccionado;
+    var elMes = $("#previsto-mes");
+    if (elMes) {
+      elMes.textContent = nombreMesAnio(mes);
+    }
+
+    var p = PCC.calcularRepartoPrevisto(inicioDeMes(mes), lista, cfg);
+
+    setTexto("#previsto-facturacion", PCC.formatoMoneda(p.facturacion));
+    setTexto("#previsto-gastos", PCC.formatoMoneda(p.gastosFijos));
+    setTexto("#previsto-octavio", PCC.formatoMoneda(p.pagosOctavioPrevisto));
+    setTexto("#previsto-ganancia", PCC.formatoMoneda(p.gananciaPrevista));
+    setTexto("#previsto-mitad", PCC.formatoMoneda(p.mitad));
+    setTexto("#previsto-carlos", PCC.formatoMoneda(p.totalCarlos));
+    setTexto("#previsto-octavio-total", PCC.formatoMoneda(p.totalOctavio));
+
+    var nota = $("#previsto-gastos-nota");
+    if (nota) {
+      nota.textContent = p.luzAplica
+        ? "Incluye luz este mes"
+        : "Sin luz este mes";
+      nota.classList.toggle("reparto__nota--aplica", !!p.luzAplica);
+    }
   }
 
   /* ---------------------- Reparto de fin de mes ------------- */

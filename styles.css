@@ -569,6 +569,62 @@ body {
   color: var(--ambar);
 }
 
+/* ---------------------- Reparto PREVISTO del mes ---------- */
+/* Badge "previsto · si todos pagan este mes": acento suave para que se
+   distinga del reparto real sin competir con los totales. Funciona en claro
+   y oscuro via variables. */
+.panel__nota--previsto {
+  background: var(--verde-suave);
+  color: var(--verde);
+}
+
+/* ---------------------- Reparto cobrado (colapsable) ------ */
+/* El reparto real queda plegado por defecto: el <summary> hace de cabecera
+   del panel. Quitamos el marcador nativo y pintamos un chevron propio. */
+.reparto-cobrado__resumen {
+  cursor: pointer;
+  list-style: none;
+  outline: none;
+}
+
+.reparto-cobrado__resumen::-webkit-details-marker { display: none; }
+
+.reparto-cobrado__cabecera {
+  margin-bottom: 0;
+}
+
+/* Chevron propio alineado a la derecha, antes del badge "según pagos
+   cobrados". Rota al abrir el <details>. */
+.reparto-cobrado__resumen .panel__nota {
+  position: relative;
+  padding-right: 22px;
+}
+
+.reparto-cobrado__resumen .panel__nota::after {
+  content: "▸";
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: transform 0.15s ease;
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+}
+
+.reparto-cobrado[open] .reparto-cobrado__resumen .panel__nota::after {
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.reparto-cobrado__resumen:focus-visible {
+  box-shadow: 0 0 0 2px var(--acento);
+  border-radius: var(--radio-sm);
+}
+
+/* Aire entre la cabecera plegable y el cuerpo del reparto cobrado. */
+.reparto-cobrado__cuerpo {
+  padding-top: 16px;
+}
+
 .reparto__totales {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -51,6 +51,38 @@ La **primera vez** que alguien entra y **Firestore está vacío** (sin clientes 
 
 Si Firestore **ya tiene datos**, la app **no los duplica ni los sobrescribe**: la nube es la fuente de verdad y simplemente se refleja en cada dispositivo.
 
+## Reparto del mes: previsto y cobrado
+
+La app muestra **dos** vistas del reparto entre socios (Carlos y Octavio). Ambas usan la **misma fórmula**; lo único que cambia es el punto de partida:
+
+### Reparto previsto del mes (visible desde el inicio)
+
+Es el panel **que se ve a simple vista** y el que Octavio le muestra a su socio: **cuánto le toca a cada uno sobre la facturación total del mes**, es decir, **lo que entra si TODOS los clientes activos pagan su cuota**, aunque todavía no se haya cobrado (porque *"aunque el socio no cobre, me tiene que dar mi parte"*). Va etiquetado como **"previsto · si todos pagan este mes"** para no confundirlo con el reparto real.
+
+La fórmula (idéntica a la del reparto real, pero sobre la **facturación** en vez de lo cobrado):
+
+```
+Facturación total del mes   (suma de cuotas de clientes ACTIVOS; hoy = $9,400)
+  − Gastos fijos            (Starlink = numAntenas × costoAntena, p.ej. 2×1305 = 2610 + Luz si aplica el mes)
+  − Pagos directos a Octavio (suma de cuotas de los clientes Activos con socio 'Octavio'; hoy = $500)
+  = Ganancia prevista a repartir
+  ÷ 2 = Mitad por socio
+Total Carlos (previsto)  = su mitad
+Total Octavio (previsto) = su mitad − sus pagos directos
+```
+
+Ejemplo con los datos actuales en un mes **sin luz**: `9400 − 2610 − 500 = 6290`; mitad `3145`; **Carlos 3145** y **Octavio 2645** (`3145 − 500`). En un mes **con luz** (la luz es bimestral), los gastos suben a `2910` y la ganancia baja a `5990`.
+
+Notas importantes:
+
+- La **facturación** y los **pagos directos de Octavio** se calculan con el **padrón ACTUAL** de clientes activos (las cuotas son fijas, no dependen del mes). Los clientes **Pausados no cuentan** (no se les cobra).
+- Lo único que depende del **mes seleccionado** con la navegación **‹ ›** son los **gastos fijos**, porque la **luz es bimestral**. El subtítulo del panel (`#previsto-mes`) cambia con la navegación de mes.
+- La lógica vive en la función pura `PCC.calcularRepartoPrevisto(fecha, clientes, cfg)`, que **reutiliza** `facturacionTotalMensual` y `gastosFijosDelMes` **sin cambiar la fórmula** del reparto.
+
+### Reparto de fin de mes (cobrado, colapsado por defecto)
+
+El panel **"Reparto de fin de mes" ("según pagos cobrados")** ahora está **plegado por defecto** (un acordeón nativo `<details>`: solo se ve su título y se despliega al tocarlo). Es **informativo / de control interno**: se basa en los **pagos ya cobrados** (botón **Pagar** de las tarjetas) con fecha en el mes seleccionado, no en la facturación. Sus valores (`#reparto-ingresos`, `#reparto-mes`, totales, etc.) **se siguen calculando y actualizando** aunque el acordeón esté cerrado; solo quedan ocultos a la vista hasta que se abre.
+
 ## Pasos en Firebase (consola)
 
 Estos pasos se hacen una sola vez en la [consola de Firebase](https://console.firebase.google.com/) sobre el proyecto `panel-clientes-12a4a`:
