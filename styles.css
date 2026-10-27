@@ -854,10 +854,18 @@ body {
 /* ---------------------- Listas / tarjetas ----------------- */
 .lista-tarjetas {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  /* Punto 6 (paquete 0-6): un poco mas de aire entre tarjetas para que
-     respiren, estilo iOS. Aplica a #lista-clientes, #lista-pagos y
-     #lista-movimientos (todos usan .lista-tarjetas). */
+  /* Cuadricula ADAPTATIVA (Opcion A): las tarjetas se acomodan solas segun
+     el ancho disponible, sin forzar columnas por breakpoint. El patron
+     'minmax(min(100%, 260px), 1fr)' hace que:
+       - en escritorio/tablet quepan 2-3 cuadritos lado a lado,
+       - en movil ANCHO/horizontal (contenedor >= ~540px) aparezcan 2,
+       - en movil vertical normal (~360-430px, contenedor ~320-390px)
+         quede 1 columna (el 'min(100%, 260px)' deja que una sola tarjeta
+         ocupe el 100% cuando no caben dos con el gap).
+     Aplica a #lista-clientes, #lista-pagos y #lista-movimientos (todos
+     usan .lista-tarjetas). El aire entre tarjetas (gap) se compacta en los
+     breakpoints de movil mas abajo. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
   gap: 18px;
 }
 
@@ -2623,15 +2631,22 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
     justify-content: center;
   }
 
+  /* Cuadricula adaptativa en movil: NO se fuerza '1fr'. Dejamos que la
+     regla base (minmax(min(100%, 260px), 1fr)) decida cuantas columnas
+     caben: 1 en vertical, 2 en movil ancho/horizontal. Solo se compacta el
+     aire entre tarjetas para que se vean como "cuadritos" ordenados y no
+     estirados. */
   .lista-tarjetas {
-    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   /* ---- Tarjetas de cliente "tipo app" en movil ----
-     Mas aire interno y datos mas legibles de un vistazo. */
+     Mas COMPACTAS: menos padding y gaps internos para que no se vean
+     estiradas, conservando legibilidad (nombre protagonista, monto claro)
+     y areas de toque comodas en los botones de accion. */
   .tarjeta {
-    gap: 14px;
-    padding: 16px 16px 14px;
+    gap: 10px;
+    padding: 14px 14px 12px;
   }
 
   .tarjeta__nombre {
@@ -2639,12 +2654,12 @@ table.historial-tabla tbody tr.historial-fila--manual td.historial-celda-mes {
   }
 
   .tarjeta__monto {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
   }
 
   .tarjeta__datos {
-    font-size: 0.92rem;
-    gap: 8px 12px;
+    font-size: 0.88rem;
+    gap: 6px 12px;
   }
 
   /* El badge de estado (Vencido / Vence / Pagado) bien visible. */
