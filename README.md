@@ -64,14 +64,15 @@ La fórmula (idéntica a la del reparto real, pero sobre la **facturación** en 
 ```
 Facturación total del mes   (suma de cuotas de clientes ACTIVOS; hoy = $9,400)
   − Gastos fijos            (Starlink = numAntenas × costoAntena, p.ej. 2×1305 = 2610 + Luz si aplica el mes)
-  − Pagos directos a Octavio (suma de cuotas de los clientes Activos con socio 'Octavio'; hoy = $500)
-  = Ganancia prevista a repartir
+  = Ganancia prevista a repartir   (los pagos directos de Octavio NO se restan aquí)
   ÷ 2 = Mitad por socio
 Total Carlos (previsto)  = su mitad
-Total Octavio (previsto) = su mitad − sus pagos directos
+Total Octavio (previsto) = su mitad − sus pagos directos  (una sola vez, ya los cobra directo)
 ```
 
-Ejemplo con los datos actuales en un mes **sin luz**: `9400 − 2610 − 500 = 6290`; mitad `3145`; **Carlos 3145** y **Octavio 2645** (`3145 − 500`). En un mes **con luz** (la luz es bimestral), los gastos suben a `2910` y la ganancia baja a `5990`.
+Los **pagos directos a Octavio** (suma de cuotas de los clientes Activos con socio 'Octavio'; hoy = $500) **NO** bajan la ganancia común: se descuentan **una sola vez, al final, solo del total de Octavio**.
+
+Ejemplo con los datos actuales en un mes **sin luz**: `9400 − 2610 = 6790`; mitad `3395`; **Carlos 3395** y **Octavio 2895** (`3395 − 500`). Comprobación estilo Excel: `3395 + 2895 = 6290`, más los `500` que Octavio ya cobró directo = `6790`, que cuadra con la ganancia. En un mes **con luz** (la luz es bimestral), los gastos suben a `2910`, la ganancia baja a `6490`, mitad `3245`; **Carlos 3245** y **Octavio 2745**.
 
 Notas importantes:
 
@@ -150,7 +151,7 @@ Una segunda ronda de **pulido puramente visual** (sin tocar la lógica, conserva
 
 - **Acento lateral sutil en las tarjetas:** la barra lateral de color que marcaba el estado (roja para vencidos, etc.) era **gruesa** y competía con el borde de la tarjeta ("doble borde", se veía muy "web"). Ahora es un **borde izquierdo más delgado y atenuado** (con `color-mix` sobre la superficie) más una **tinta de fondo apenas perceptible** del color de estado. Se mantiene la semántica (**rojo = vencido, ámbar = próximo, verde = pagado, neutro = al corriente**) pero en versión suave y en **ambos temas**.
 - **Badge de estado más pequeño y discreto:** la pastilla de estado de la tarjeta (**"Vencido hace N días"**, **"Vence…"**, **"Pagado (mes)"**) se **achicó** (menos fuente, padding y peso) para que el **nombre del cliente** sea el protagonista. Conserva los colores semánticos pero más sobrios (fondo tenue + texto del color).
-- **Jerarquía en el reparto:** en **"Reparto de fin de mes"** las filas intermedias (Ingresos del mes, − Starlink, − Luz, − Pagos directos a Octavio) quedan **más tenues/secundarias** (los montos de resta en rojo atenuado), y **"Ganancia a repartir"**, **"Mitad por socio"** y sobre todo **"Total Carlos" / "Total Octavio"** **dominan** (mayor tamaño/peso). **No cambian los valores ni el cálculo**, solo el peso/tamaño/color.
+- **Jerarquía en el reparto:** en **"Reparto de fin de mes"** las filas intermedias (Ingresos del mes, − Starlink, − Luz) quedan **más tenues/secundarias** (los montos de resta en rojo atenuado), y **"Ganancia a repartir"**, **"Mitad por socio"** y sobre todo **"Total Carlos" / "Total Octavio"** **dominan** (mayor tamaño/peso). El descuento de los **pagos directos a Octavio** se muestra junto a su total (no como una fila que baje la ganancia común). **No cambian los valores ni el cálculo**, solo el peso/tamaño/color.
 - **Mes como subtítulo:** en **Resumen** y **Reparto**, el mes ya **no va entre paréntesis** en la misma línea (**"Reparto de fin de mes ( Octubre de 2026 )"**); ahora el **título principal** va en una línea y el **mes queda como subtítulo** debajo, más limpio y sin cortes raros en móvil. El mes lo sigue inyectando el JS por sus `id` (`#resumen-mes`, `#reparto-mes`) y la **navegación de meses ‹ ›** no cambia.
 - **Separadores tenues:** las líneas **punteadas** entre filas (en el reparto, estadísticas del mes y el pie "Asignar cliente" del mapa) se cambiaron por **líneas sólidas muy tenues** (borde con `color-mix` a baja opacidad). El **recibo** conserva a propósito sus líneas punteadas (estética de **ticket**) y su `@media print` **no cambia**.
 - **Más aire entre tarjetas:** se aumentó un poco el **espacio entre tarjetas** de cliente/pagos para que **respiren**, estilo iOS.
@@ -177,7 +178,7 @@ Como no hay navegador en el entorno de pruebas, esto se comprueba **a mano en el
 7. **Claro/oscuro:** alterna el **tema** y confirma que iconos, tarjetas, barra inferior y hojas respetan el color en ambos modos.
 8. **Acento lateral sutil (sin doble borde):** en las tarjetas de cliente, la marca de estado debe verse como un **acento delgado y suave** (no una barra gruesa) y **no** debe competir con el borde de la tarjeta.
 9. **Badge de estado pequeño y nombre protagonista:** la pastilla **"Vencido hace N días" / "Pagado (mes)"** debe verse **chica y discreta**, y el **nombre del cliente** debe resaltar como lo más importante de la tarjeta.
-10. **Reparto con totales dominantes:** en **"Reparto de fin de mes"**, **Total Carlos / Total Octavio** (y **Ganancia a repartir / Mitad por socio**) deben **dominar**, y las filas de **Starlink / Luz / Pagos directos** verse **más tenues**.
+10. **Reparto con totales dominantes:** en **"Reparto de fin de mes"**, **Total Carlos / Total Octavio** (y **Ganancia a repartir / Mitad por socio**) deben **dominar**, y las filas de **Starlink / Luz** verse **más tenues**. El descuento de **pagos directos a Octavio** debe aparecer junto a su total, no como una fila que baje la ganancia.
 11. **Mes como subtítulo:** en **Resumen** y **Reparto**, el **mes** debe aparecer como **subtítulo** debajo del título (no entre paréntesis en la misma línea), y la navegación de meses **‹ ›** debe seguir cambiando ese subtítulo.
 12. **Separadores tenues:** las líneas entre filas del reparto/estadísticas deben verse como **líneas sólidas muy suaves** (ya no punteadas). El **recibo** sí conserva su punteado de ticket.
 13. **Más aire entre tarjetas:** las tarjetas deben tener **un poco más de separación** entre sí.
@@ -356,16 +357,15 @@ Para el mes seleccionado, el reparto se calcula paso a paso:
 Ingresos del mes (pagos cobrados)
   − Starlink (antenas)
   − Luz (solo los meses que aplica)
-  − Pagos directos a Octavio
-  = Ganancia a repartir
+  = Ganancia a repartir   (los pagos directos de Octavio NO se restan aquí)
   ÷ 2  → mitad para cada socio
 
 Total Carlos  = su mitad
-Total Octavio = su mitad − sus pagos directos
+Total Octavio = su mitad − sus pagos directos  (una sola vez, ya los cobra directo)
 ```
 
 - **Carlos** recibe su mitad de la ganancia a repartir.
-- **Octavio** recibe su mitad **menos** los pagos directos de los clientes marcados como suyos. El motivo: ese dinero **Octavio ya lo cobró directo** de esos clientes, así que se le descuenta de su parte del reparto para no pagárselo dos veces. Esos pagos ya se habían apartado del total antes de dividir 50/50 (por eso se restan arriba como *Pagos directos a Octavio*).
+- **Octavio** recibe su mitad **menos** los pagos directos de los clientes marcados como suyos. El motivo: ese dinero **Octavio ya lo cobró directo** de esos clientes, así que se le descuenta de su parte del reparto para no pagárselo dos veces. **Este descuento se aplica UNA sola vez, solo al total de Octavio**: los pagos directos **NO** se restan de la *Ganancia a repartir* (esa es solo *ingresos − gastos fijos*), por lo que la mitad de Carlos no se ve afectada. En la interfaz, el monto que se descuenta a Octavio se muestra junto a su total (*"su mitad menos $500 que ya cobró directo"*), no como una línea que baje la ganancia común.
 
 > **Importante — qué cuenta como "Ingresos del mes" en el reparto:** se basa en los **pagos cobrados de clientes**, es decir, los movimientos registrados con el botón **Pagar** de una tarjeta (`esPago = true`) cuya fecha cae en el mes seleccionado. Esto es coherente con la métrica *Pagos cobrados este mes* de las Estadísticas. Un **ingreso capturado a mano** con **Nuevo Ingreso** suma a la métrica *Ingresos* del Resumen, pero **no** entra en el reparto. Además, un pago solo se atribuye a Octavio si el movimiento quedó asociado a un cliente marcado "Octavio"; el botón **Pagar** guarda esa asociación automáticamente.
 

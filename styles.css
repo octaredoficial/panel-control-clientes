@@ -667,6 +667,13 @@ body {
   color: var(--texto-suave);
 }
 
+/* Monto de los pagos directos que SOLO se descuentan del total de Octavio
+   (ya no bajan la ganancia comun). Rojo atenuado, coherente con --resta. */
+.reparto__socio-resta {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--rojo) 78%, var(--texto-suave));
+}
+
 /* Etiqueta discreta del socio en la tarjeta de cliente */
 .etiqueta-socio {
   display: inline-block;

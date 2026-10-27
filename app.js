@@ -661,19 +661,20 @@
      6.b Reparto de fin de mes entre socios (Carlos / Octavio)
      ------------------------------------------------------------
      El negocio es de dos socios: Carlos y Octavio. Al cierre de mes
-     se reparte la ganancia 50/50, pero antes se descuentan los gastos
-     fijos compartidos (Starlink + luz) y se aparta el pago directo de
-     los clientes marcados socio 'Octavio' (ese dinero Octavio YA lo
-     cobro directo, por eso se le descuenta de su parte del reparto).
+     se reparte la ganancia 50/50, pero antes se descuentan SOLO los
+     gastos fijos compartidos (Starlink + luz). El pago directo de los
+     clientes marcados socio 'Octavio' (ese dinero Octavio YA lo cobro
+     directo) NO baja la ganancia comun: se descuenta UNA sola vez, al
+     final, de la parte de Octavio.
 
-     Formula (confirmada por el usuario):
+     Formula (confirmada por el usuario, como su Excel):
        ingresosMes  = pagos cobrados (esPago) con fecha en el mes
        pagosOctavio = de esos pagos, los de clientes socio 'Octavio'
        gastos       = Starlink (2610 fijo) + luz (300 si aplica el mes)
-       gananciaRepartir = ingresosMes - gastos - pagosOctavio
+       gananciaRepartir = ingresosMes - gastos        (SIN restar pagosOctavio)
        mitad        = gananciaRepartir / 2
        totalCarlos  = mitad
-       totalOctavio = mitad - pagosOctavio   (ya los cobro directo)
+       totalOctavio = mitad - pagosOctavio   (una sola vez, ya los cobro directo)
      ---------------------------------------------------------- */
 
   /**
@@ -892,7 +893,9 @@
     }
 
     var gastos = gastosFijosDelMes(ref, cfg);
-    var gananciaRepartir = ingresosMes - gastos.total - pagosOctavio;
+    // Los pagos directos a Octavio NO se restan de la ganancia a repartir:
+    // solo se descuentan UNA vez, al final, del total de Octavio.
+    var gananciaRepartir = ingresosMes - gastos.total;
     var mitad = gananciaRepartir / 2;
 
     return {
@@ -921,10 +924,10 @@
    *   facturacion      = facturacionTotalMensual(clientes) (cuotas de Activos)
    *   gastosFijos      = Starlink + Luz (si aplica el mes de 'fecha')
    *   pagosOctavio     = suma de cuotas (monto) de Activos con socio 'Octavio'
-   *   gananciaPrevista = facturacion − gastosFijos − pagosOctavio
+   *   gananciaPrevista = facturacion − gastosFijos        (SIN restar pagosOctavio)
    *   mitad            = gananciaPrevista / 2
    *   totalCarlos      = su mitad
-   *   totalOctavio     = su mitad − sus pagos directos (los ya "cobra" directo)
+   *   totalOctavio     = su mitad − sus pagos directos (una sola vez, ya los cobra directo)
    *
    * NOTA: la facturacion y los pagos directos de Octavio usan el PADRON
    * ACTUAL de clientes (las cuotas son fijas, no dependen del mes). Solo los
@@ -956,7 +959,9 @@
     }
 
     var gastos = gastosFijosDelMes(ref, cfg);
-    var gananciaPrevista = facturacion - gastos.total - pagosOctavioPrevisto;
+    // Los pagos directos a Octavio NO se restan de la ganancia a repartir:
+    // solo se descuentan UNA vez, al final, del total de Octavio.
+    var gananciaPrevista = facturacion - gastos.total;
     var mitad = gananciaPrevista / 2;
 
     return {
